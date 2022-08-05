@@ -1,0 +1,309 @@
+---
+title: "replication_choice_bias"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+LIBRARIES
+```{r}
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(MASS)
+library(writexl)
+
+```
+
+
+GENERATING CSVS
+```{r}
+correct_stim_list = c("sound/baba_rep.wav" = "bouba",
+                      "sound/gaga_rep.wav" = "bouba",
+                      "sound/keekee.wav" = "kiki",
+                      "sound/teetee.wav" = "kiki")
+
+left_key = "z"
+right_key = "m"
+
+which_is_correct <- function(stimuli,lefts,rights) {
+  
+  #Make a new vector the same length as the number of rows
+  correct_vec <- rep(NA,length(stimuli))
+  
+  #For each row in the dataset....
+  for(i in seq(1:length(stimuli))){
+    
+    #Get the correct type ("Bouba" or "Kiki") by checking in the stim list
+    correct_type <- correct_stim_list[stimuli[i]]
+    
+    #If the correct type is in the left one the correct key was the left key
+    if(grepl(correct_type, lefts[i], fixed = TRUE)){
+      correct_key <- left_key
+    }
+    #If the correct type is in the right one the correct key was the right key
+    else if(grepl(correct_type, rights[i], fixed = TRUE)){
+      correct_key <- right_key
+    }
+    #If it isn't in either something has gone wrong so you'll get an NA
+    else{
+      correct_key <- NA
+    }
+    
+    #Put that correct key in the output vector
+    correct_vec[i] <- correct_key
+  }
+  
+  #Return the final filled in vector
+  return(correct_vec)
+}
+
+#look at the results files
+rds_files <- list.files("replication RDS files",
+                        pattern = "\\.rds$",
+                        full.names = TRUE)
+
+rds_files
+#change [#] to pick which one to read
+
+counter <- 0
+
+for(file in rds_files){
+  print(file)
+  file_id <- str_extract(file,"b[kl][og]\\d\\d\\d")
+  
+  counter <- counter+1
+  print(file_id)
+  
+  print(counter)
+  
+  data <- readRDS(file)
+  
+  #assign ID
+  participant_ID <- data$results$`sp_id`[[1]]
+  main_data <- data$results$`Main page`[[1]]
+  
+  
+  df <- read.table(text = main_data, sep =",", header = TRUE, stringsAsFactors = FALSE)
+  #df is the raw data, tells you stimulus and responses
+  
+  
+  ##Ben Code Attempt***creating tidy data and choice bias score***
+  
+  #First remove unneeded columns
+  data_cols <- df %>% dplyr::select(c(trial_type,stimulus,response,left_image,right_image,correct_response,correct)) 
+  
+  #Then Filter practice and experimental trials
+  data_prac <- data_cols %>% filter(grepl("Prac", stimulus, fixed = TRUE))
+  data_exp <- data_cols %>% filter(!grepl("Prac", stimulus, fixed = TRUE)) %>%
+    filter(trial_type  %in% c("bouba-kiki","image-keyboard-response")) %>%
+    filter(stimulus != "img/fixation.png")
+  
+  #filter out BK data 
+  data_exp_bk <-data_exp %>% filter(trial_type == "bouba-kiki")
+  #filter out the LG data
+  data_exp_lg <-data_exp %>% filter(trial_type =="image-keyboard-response") %>%
+    dplyr::select(c(trial_type, stimulus, response))
+  
+  #Now write a function to find if the left or the right image is "correct"
+  
+  data_exp_bk <- data_exp_bk %>% mutate(correct_response = which_is_correct(stimulus,left_image,right_image))
+  data_exp_bk <- data_exp_bk %>% mutate(correct = ifelse(correct_response == response,
+                                                         1,
+                                                         ifelse(response == left_key | response == right_key,
+                                                                0,
+                                                                NA)))
+  
+  data_exp_bk <- data_exp_bk %>% mutate(sound = ifelse(stimulus %in% c("sound/baba_rep.wav","sound/gaga_rep.wav"),
+                                                       "round",
+                                                       ifelse(stimulus %in% c("sound/teetee.wav","sound/keekee.wav"),
+                                                              "spiky",
+                                                              NA))) %>%
+    filter(!is.na(correct))
+  
+  
+  
+  
+  
+  file_path_bk <- paste0("replication CSV files/",file_id,".csv")
+  file_path_prac <- paste0("replication practice trials/",file_id,".csv")
+    write.csv(data_exp_bk, file_path_bk) 
+    write.csv(data_prac, file_path_prac)
+
+}
+```
+
+PUT ADULT AND CHILD DATA TOGETHER
+
+```{r}
+all_files <- list.files("replication CSV files")
+first_file <- TRUE
+
+#Adds ID code onto each trial, binds all individual csvs into one large dataframe
+for(i in 1:length(all_files)){
+  if(grepl("b",all_files[i])){
+    print(all_files[i])
+    if(first_file){
+      all_data_df <- read.csv(paste0("replication CSV files/",all_files[i]))
+      all_data_df <- all_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      first_file <- FALSE
+    }
+    else{
+      new_data_df <- read.csv(paste0("replication CSV files/",all_files[i]))
+      new_data_df <- new_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      all_data_df <- rbind(all_data_df,new_data_df)
+    }
+  }
+}
+
+#filter out the NAs
+all_data_df <- all_data_df %>% filter(!is.na(correct))
+
+all_data_df <- all_data_df %>% mutate(group = ifelse(substr(ID,3,3)=="o","adult","child"))
+unique(all_data_df$group)
+```
+
+CALCULATE CHOICE BIAS
+```{r}
+#CALCULATE CHOICE BIAS
+#group_by(ID,sound,group) group for when i have both adults and children
+data_2_sounds <- all_data_df %>% group_by(ID,sound, group) %>%
+  summarise(bias = sum(correct)/n())
+
+data_all_sounds <- all_data_df %>% group_by(ID,sound,stimulus, group) %>%
+  summarise(bias = sum(correct)/n())
+```
+
+
+PIVOT THE DATA_2_SOUNDS
+
+```{r}
+data_2_sounds
+pivot_data_2_sounds <- data_2_sounds %>% pivot_wider(names_from = sound, values_from = bias, values_fill = NA)
+pivot_data_2_sounds
+```
+PIVOT THE DATA_ALL_SOUNDS
+
+```{r}
+data_all_sounds
+pivot_data_all_sounds <- data_all_sounds %>% ungroup() %>% dplyr::select(-c(sound)) %>%
+                           pivot_wider(names_from = stimulus, values_from = bias, values_fill = NA) 
+                            
+pivot_data_all_sounds
+```
+
+CALCULATE MEANS 
+
+```{r}
+
+#2 sound data
+data_means <- data_2_sounds %>% 
+  group_by(sound, group) %>% # Group the data by sound
+  summarize(mean_bias=mean(bias), 
+            sd_bias=sd(bias), # Create variable with sd of cty per group
+            N_bias=n(), # Create new variable N of cty per group
+            se=sd_bias/sqrt(N_bias), 
+            upper_limit=mean_bias+se, # Upper limit
+            lower_limit=mean_bias-se) # Lower limit) # Create variable with se of cty per group) # Create new variable which is the mean of bias
+
+p1 <- ggplot() + 
+  geom_bar(data = data_means,
+           aes(x=sound, y=mean_bias, fill = sound), stat="identity", width=0.5) + 
+  geom_errorbar(data = data_means, aes(x=sound, ymin=lower_limit, ymax=upper_limit), width=0.40) + 
+  geom_count(data = data_2_sounds, aes(x=sound, y=bias)) +
+  scale_size_continuous(breaks = c(2, 4, 6, 8, 10, 12, 14)) +
+  theme_light()+
+  facet_wrap(~ group) +
+  ylim(0,1) +
+  ylab("choice bias")
+
+p1
+
+#all (four) sound data
+data_means <- data_all_sounds %>% 
+  group_by(sound, group, stimulus) %>% # Group the data by sound
+  summarize(mean_bias=mean(bias), 
+            sd_bias=sd(bias), # Create variable with sd of cty per group
+            N_bias=n(), # Create new variable N of cty per group
+            se=sd_bias/sqrt(N_bias), 
+            upper_limit=mean_bias+se, # Upper limit
+            lower_limit=mean_bias-se) # Lower limit) # Create variable with se of cty per group) # Create new variable which is the mean of bias
+
+p2 <- ggplot() + 
+  geom_bar(data = data_means,
+           aes(x=stimulus, y=mean_bias, fill = sound), stat="identity", width=0.5) + 
+  geom_errorbar(data = data_means, aes(x=stimulus, ymin=lower_limit, ymax=upper_limit), width=0.40) + 
+  geom_count(data = data_all_sounds, aes(x=stimulus, y=bias)) +
+  scale_size_continuous(breaks = c(2, 4, 6, 8, 10, 12, 14)) +
+  theme_light()+
+  facet_wrap(~ group) +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  ylim(0,1) +
+  ylab("choice bias")
+
+p2
+```
+
+Looking at first trials 
+```{r}
+#look at first trials only 
+first_trial <- all_data_df %>% group_by(ID) %>% 
+  filter(row_number()==1)
+```
+
+
+
+
+
+PUT ALL THE PRACTICE TRIALS TOGETHER
+```{r}
+
+```
+
+```{r}
+all_files <- list.files("replication practice trials")
+first_file <- TRUE
+
+#Adds ID code onto each trial, binds all individual csvs into one large dataframe
+for(i in 1:length(all_files)){
+  if(grepl("b",all_files[i])){
+    print(all_files[i])
+    if(first_file){
+      P_all_data_df <- read.csv(paste0("replication practice trials/",all_files[i]))
+      P_all_data_df <- P_all_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      first_file <- FALSE
+    }
+    else{
+      P_new_data_df <- read.csv(paste0("replication practice trials/",all_files[i]))
+      P_new_data_df <- P_new_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      P_all_data_df <- rbind(P_all_data_df,P_new_data_df)
+    }
+  }
+}
+```
+FILTER THE P_ALL_DATA_DF
+CALCULATE PRACTICE SCORE
+
+```{r}
+#fill in null responses as false- WILL NOT RUN UNLES PREVIOUS BLOCK IS RUN FIRST
+P_all_data_df <- P_all_data_df  %>% mutate(correct = ifelse(correct %in% c("true","false"), correct, "false"))
+
+#change to 0 for false and 1 for true
+P_all_data_df <- P_all_data_df  %>% mutate(correct = ifelse(correct %in% c("true"), 1, 0))
+
+
+P_all_data_df <- P_all_data_df %>% mutate(group = ifelse(substr(ID,3,3)=="o","adult","child"))
+unique(P_all_data_df$group)
+
+#CALCULATE prac_score
+practice_score <- P_all_data_df %>% group_by(ID,group) %>%
+  summarise(prac_score = fractions(sum(correct)/n()), 
+            N_Ptrials = n())
+practice_score <- as.data.frame(practice_score)
+
+write.csv(practice_score, 'replication_practice_score.csv', row.names=F)
+```
+
+

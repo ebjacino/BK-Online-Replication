@@ -1,0 +1,416 @@
+---
+title: "final graphs bko1 and bko2"
+output: html_document
+---
+First we create the graph of all the 16 stimuli
+
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+library(forcats)
+library(bbmle)      # for ICtab()
+library(car)        # for Anova()
+
+```
+Colors
+```{r}
+angular_color = "#FFA69E"
+curved_color = "#B88BBB"
+```
+
+```{r}
+round_any <- function(x, accuracy, f=round){f(x/ accuracy) * accuracy}
+```
+
+```{r}
+all_data_df <- read.csv("all_data_df.csv")
+```
+
+```{r}
+stimulus_bias_data <- all_data_df %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+                                      group_by(ID,stimulus,sound) %>% 
+                                      summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      mutate(bias = ifelse(sound == "angular",-1*bias,bias)) %>%
+                                      group_by(stimulus,sound) %>%
+                                      summarize(mean_bias = mean(bias),
+                                                sd_bias = sd(bias),
+                                                se_bias=sd_bias/sqrt(n())) %>%
+                                      ungroup() %>%
+                                      mutate(stimulus = fct_reorder2(stimulus, sound, mean_bias))
+
+stimulus_bias_data_points <- all_data_df %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+                                      group_by(ID,stimulus,sound) %>% 
+                                      summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      ungroup() %>%
+                                      mutate(bias = ifelse(sound == "angular",-1*bias,bias)) %>%
+                                      mutate(bias_round = round_any(bias,0.25)) %>%
+                                      group_by(stimulus,sound,bias_round) %>%
+                                      summarise(Count = n())
+```
+
+
+```{r}
+ggplot() +
+  geom_col(stimulus_bias_data, mapping = aes(x = stimulus, y = mean_bias), color = "black", fill = NA) +
+  geom_point(stimulus_bias_data_points, mapping = aes(x = stimulus, y = bias_round, size = Count, color = sound)) +
+  geom_col(stimulus_bias_data, mapping = aes(x = stimulus, y = mean_bias, fill = sound), alpha = 0.5) +
+  geom_point(stimulus_bias_data, mapping = aes(x = stimulus, y = mean_bias)) +
+  geom_errorbar(stimulus_bias_data, mapping = aes(x = stimulus, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1) +
+  theme_classic() +
+  ylim(-0.5,0.5) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  ylab("Bias") +
+  xlab("Stimulus")
+
+#ggsave("poster graphs/all_stim_graph.png")
+```
+
+
+
+load in the bko2 CSV files
+all data is all_data_df
+```{r}
+library(dplyr)
+library(bbmle)
+library(car)
+library(ggpubr)
+library(emmeans)
+
+
+all_files <- list.files("bko2_CSVs")
+first_file <- TRUE
+
+#Adds ID code onto each trial, binds all individual csvs into one large dataframe
+for(i in 1:length(all_files)){
+  if(grepl("b",all_files[i])){
+    print(all_files[i])
+    if(first_file){
+      all_data_df <- read.csv(paste0("bko2_CSVs/",all_files[i]))
+      all_data_df <- all_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      first_file <- FALSE
+    }
+    else{
+      new_data_df <- read.csv(paste0("bko2_CSVs/",all_files[i]))
+      new_data_df <- new_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      all_data_df <- rbind(all_data_df,new_data_df)
+    }
+  }
+}
+
+#filter out the NAs
+all_data_df <- all_data_df %>% filter(!is.na(correct))
+```
+
+calculate the CHOICE BIAS for each dimension 
+```{r}
+#CALCULATE CHOICE BIAS
+#group_by(ID,sound,group) group for when i have both adults and children
+data_orth <- all_data_df %>% group_by(ID,sound) %>%
+  summarise(bias = sum(correct)/n())
+
+data_all_sounds <- all_data_df %>% group_by(ID,sound,stimulus) %>%
+  summarise(bias = sum(correct)/n())
+
+data_vowel_type <- all_data_df %>% group_by(vowel_type, ID) %>%
+  summarise(bias = sum(correct)/n())
+
+data_congruency = all_data_df %>% group_by(congruent, ID) %>%
+  summarise(bias = sum(correct)/n())
+
+data_voicing = all_data_df %>% group_by(voicing, ID) %>%
+  summarise(bias = sum(correct)/n())
+```
+
+calculate means, SE, error bar numbers for each dimension 
+```{r}
+#calculating means and SE
+data_means_orth <- data_orth %>% 
+  group_by(sound) %>% # Group the data by sound
+  summarize(mean_bias=mean(bias), 
+            sd_bias=sd(bias), # Create variable with sd per group
+            N_bias=n(), # Create new variable N  per group
+            se=sd_bias/sqrt(N_bias), 
+            upper_limit=mean_bias+se, # Upper limit
+            lower_limit=mean_bias-se) # Lower limit)  
+
+data_means_all <- data_all_sounds %>% 
+  group_by(sound, stimulus) %>% # Group the data by sound
+  summarize(mean_bias=mean(bias), 
+            sd_bias=sd(bias), # Create variable with sd per group
+            N_bias=n(), # Create new variable N  per group
+            se=sd_bias/sqrt(N_bias), 
+            upper_limit=mean_bias+se, # Upper limit
+            lower_limit=mean_bias-se) # Lower limit) 
+
+data_means_vowel_type <- data_vowel_type %>%
+  group_by(vowel_type) %>% # Group the data by sound
+  summarize(mean_bias=mean(bias), 
+            sd_bias=sd(bias), # Create variable with sdper group
+            N_bias=n(), # Create new variable N of group
+            se=sd_bias/sqrt(N_bias), 
+            upper_limit=mean_bias+se, # Upper limit
+            lower_limit=mean_bias-se) # Lower limit) 
+
+data_means_congruency <- data_congruency %>%
+  group_by(congruent) %>% # Group the data by sound
+  summarize(mean_bias=mean(bias), 
+            sd_bias=sd(bias), # Create variable with sd per group
+            N_bias=n(), # Create new variable N  per group
+            se=sd_bias/sqrt(N_bias), 
+            upper_limit=mean_bias+se, # Upper limit
+            lower_limit=mean_bias-se) # Lower limit) 
+
+data_means_voicing <- data_voicing %>%
+  group_by(voicing) %>% # Group the data by sound
+  summarize(mean_bias=mean(bias), 
+            sd_bias=sd(bias), # Create variable with sd  per group
+            N_bias=n(), # Create new variable N  per group
+            se=sd_bias/sqrt(N_bias), 
+            upper_limit=mean_bias+se, # Upper limit
+            lower_limit=mean_bias-se) # Lower limit) 
+  
+```
+
+listing comparisons for significance bars
+```{r}
+#bias for orthography
+orth_comparisons <- list( c("angular", "curved"))
+
+#bias for vowel type
+vowel_comparisions <- list( c("/a/", "/i/"))
+
+#bias for congruency
+congruency_comparisions <- list( c("congruent", "incongruent"))
+
+#bias for voicing
+voicing_comparisions <- list( c("unvoiced", "voiced"))
+
+```
+
+GRAPH TIME WITH SIGNIFICANCE BARS
+```{r}
+p_orth <- ggplot() + 
+  geom_bar(data = data_means_orth,
+           aes(x=sound, y=mean_bias, fill = sound), stat="identity", width=0.5) + 
+  geom_errorbar(data = data_means_orth, aes(x=sound, ymin=lower_limit, ymax=upper_limit), width=0.40) + 
+  geom_count(data = data_orth, aes(x=sound, y=bias)) +
+  scale_size_continuous(breaks = c(2, 4, 6, 8, 10, 12, 14)) +
+  stat_compare_means(comparisons = orth_comparisons, label.y = c(1),
+                     label = "p.signif", hide.ns = FALSE)+
+  theme_light()+
+  ylim(0,1.2) +
+  ylab("choice bias")
+
+p_orth
+#ggsave("graphs/orthography new.png", width = 10, height =10)
+```
+T TEST ORTHOGRAPHY
+```{R}
+orth_testing_angular <- data_orth %>% filter(sound == "angular")
+# One-sample t-test
+res <- t.test(orth_testing_angular$bias, mu = 0.5)
+# Printing the results
+res 
+```
+
+```{R}
+orth_testing_curved <- data_orth %>% filter(sound == "curved")
+# One-sample t-test
+res2 <- t.test(orth_testing_curved$bias, mu = 0.5)
+# Printing the results
+res2 
+```
+
+```{R}
+p_all <- ggplot() +
+  geom_bar(data = data_means_all,
+           aes(x=stimulus, y=mean_bias, fill = sound), stat="identity", width=0.5) + 
+  geom_errorbar(data = data_means_all, aes(x=stimulus, ymin=lower_limit, ymax=upper_limit), width=0.40) + 
+  geom_count(data = data_all_sounds, aes(x=stimulus, y=bias)) +
+  scale_size_continuous(breaks = c(2, 4, 6, 8, 10, 12, 14)) +
+  theme_light()+
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  ylim(0,1.2) +
+  ylab("choice bias")
+
+p_all
+#ggsave("graphs/all stim.png")
+
+```
+
+```{r}
+vowel_comparisions <- list( c("/a/", "/i/"))
+
+stat.test <- compare_means(bias ~ vowel_type, data = data_vowel_type, method = "t.test")
+
+p_vowel <- ggplot(data = data_means_vowel_type, aes(x=vowel_type, y=mean_bias))+
+  geom_bar(data = data_means_vowel_type,
+          aes(x=vowel_type, y=mean_bias, fill = vowel_type), stat="identity", width=0.5) +
+  geom_errorbar(data = data_means_vowel_type, aes(x=vowel_type, ymin=lower_limit, ymax=upper_limit), width=0.40) +
+  geom_count(data = data_vowel_type, aes(x=vowel_type, y=bias)) +
+  scale_size_continuous(breaks = c(2, 4, 6, 8, 10, 12, 14)) +
+  theme_light()+
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  stat_compare_means(comparisons = vowel_comparisions, label.y = c(1.1),
+                    label = "p.signif", hide.ns = TRUE) +
+  ylim(0,1.2) +
+  ylab("choice bias")
+
+p_vowel
+#ggsave("graphs/vowel type.png")
+
+```
+
+
+```{R}
+p_congruency <- ggplot(data = data_congruency, aes(x=congruent, y=bias)) +
+  geom_bar(data = data_means_congruency,
+           aes(x=congruent, y=mean_bias, fill = congruent), stat="identity", width=0.5) + 
+  geom_errorbar(data = data_means_congruency, aes(x=congruent, y = mean_bias, ymin=lower_limit, ymax=upper_limit), width=0.40) + 
+  geom_count(data = data_congruency, aes(x=congruent, y=bias)) +
+  scale_size_continuous(breaks = c(2, 4, 6, 8, 10, 12, 14)) +
+  theme_light()+
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  stat_compare_means(comparisons = congruency_comparisions, label.y = c(1.1),
+                    label = "p.signif", hide.ns = TRUE) +
+  ylim(0,1.2) +
+  ylab("choice bias strength")
+
+p_congruency
+#ggsave("graphs/congruency.png")
+
+```
+
+
+```{r}
+
+p_voicing <- ggplot(data = data_voicing, aes(x=voicing, y=bias)) +
+  geom_bar(data = data_means_voicing,
+           aes(x=voicing, y=mean_bias, fill = voicing), stat="identity", width=0.5) + 
+  geom_errorbar(data = data_means_voicing, aes(x=voicing, y = mean_bias, ymin=lower_limit, ymax=upper_limit), width=0.40) + 
+  geom_count(data = data_voicing, aes(x=voicing, y=bias)) +
+  scale_size_continuous(breaks = c(1, 2, 4, 6, 8, 10, 12, 14)) +
+  theme_light()+
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  stat_compare_means(comparisons = voicing_comparisions, label.y = c(1.1),
+                    label = "p.signif", hide.ns = TRUE) +
+  ylim(0,1.2) +
+  ylab("choice bias")
+
+p_voicing
+#ggsave("graphs/voicing.png")
+
+```
+
+MODEL GRAPH 
+[when l stims are counted as curved correct] there is a sig effect of congruency and 
+congruency:vowel type
+```{r}
+my_comparisons <- list( c("congruent, unvoiced", "incongruent, unvoiced"),
+                        c("congruent, voiced", "incongruent, voiced"))
+#plotting
+model_plot <- ggplot(data_all_biases, aes(x = interaction(congruent,voicing,sep=", "), y = bias, 
+                            fill = interaction(congruent,voicing,sep=", ")))+
+  geom_boxplot()+
+  #geom_boxplot(aes(x = congruent, y = predict(mi_v_c_vt), color = voicing))+
+  ylim(0,1.25) +
+  facet_wrap(~ vowel_type) +
+  scale_fill_manual(values = c(voiced_color,unvoiced_color,
+                               "pink","red")) +
+  theme_light() +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  xlab("Congruency") +
+  ylab("Bias") +
+  stat_compare_means(comparisons = my_comparisons, label.y = c(1.2,1.1,1.2,1.1),
+                     label = "p.signif", hide.ns = TRUE)
+
+model_plot
+
+#ggsave("graphs/model_plot.png")
+
+```
+
+NEW GRAPHS
+```{r}
+orth_new <- all_data_df %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+                                      group_by(ID,sound) %>% 
+                                      summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      mutate(bias = ifelse(sound == "angular",-1*bias,bias)) %>%
+                                      group_by(sound) %>%
+                                      summarize(mean_bias = mean(bias),
+                                                sd_bias = sd(bias),
+                                                se_bias=sd_bias/sqrt(n())) 
+
+orth_new_points <- all_data_df %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+                                      group_by(ID,sound) %>% 
+                                      summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      ungroup() %>%
+                                      mutate(bias = ifelse(sound == "angular",-1*bias,bias)) %>%
+                                      mutate(bias_round = round_any(bias,0.25)) %>%
+                                      group_by(sound,bias_round) %>%
+                                      summarise(Count = n())
+
+```
+```{r}
+new_orthography <- ggplot() +
+  geom_col(orth_new, mapping = aes(x = sound, y = mean_bias), color = "black", fill = NA) +
+  geom_point(orth_new_points, mapping = aes(x = sound, y = bias_round, size = Count, color = sound)) +
+  geom_col(orth_new, mapping = aes(x = sound, y = mean_bias, fill = sound), alpha = 0.5) +
+  geom_point(orth_new, mapping = aes(x = sound, y = mean_bias)) +
+  geom_errorbar(orth_new, mapping = aes(x = sound, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
+  theme_classic() +
+  ylim(-0.5,0.5) +
+  #theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  ylab("Bias") +
+  xlab("Sound")
+
+new_orthography
+
+ggsave("graphs/new color scheme/new orthography.png", height = 3.5, width = 5)
+```
+
+
+```{R}
+congruency_new <- all_data_df %>% group_by(congruent, ID) %>% 
+                                      summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      #mutate(bias = ifelse(congruent == "incongruent",-1*bias,bias)) %>%
+                                      #ungroup()%>%
+                                      group_by(congruent) %>%
+                                      summarize(mean_bias = mean(bias),
+                                                sd_bias = sd(bias),
+                                                se_bias=sd_bias/sqrt(n())) 
+
+```
+
+
+```{R}
+congruency_new_points <- all_data_df %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+                                      group_by(congruent, ID) %>% 
+                                      summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      ungroup() %>%
+                                     # mutate(bias = ifelse(congruent == "incongruent",-1*bias,bias)) %>%
+                                      mutate(bias_round = round_any(bias,0.25)) %>%
+                                      group_by(congruent,bias_round) %>%
+                                      summarise(Count = n())
+
+```
+congruency graph
+```{r}
+congruency_plot <- ggplot(data_congruency, aes(x = congruent, y = bias)) +
+  geom_col(congruency_new, mapping = aes(x = congruent, y = mean_bias), color = "black", fill = NA) +
+  geom_point(congruency_new_points, mapping = aes(x = congruent, y = bias_round, size = Count, color = congruent)) +
+  geom_col(congruency_new, mapping = aes(x = congruent, y = mean_bias, fill = congruent), alpha = 0.5) +
+  geom_point(congruency_new, mapping = aes(x = congruent, y = mean_bias)) +
+  geom_errorbar(congruency_new, mapping = aes(x = congruent, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
+  stat_compare_means(comparisons = congruency_comparisions, label.y = c(0.7),
+                    label = "p.signif", hide.ns = TRUE) +
+  theme_classic() +
+  #ylim(0,0.75) +
+  ylab("Choice Bias Strength") +
+  xlab("Congruency")
+
+congruency_plot
+#ggsave("graphs/new color scheme/congruency new plot.png", width = 5, height = 3.5)
+```

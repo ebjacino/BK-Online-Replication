@@ -1,0 +1,186 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+pivoting the 2_sound data to wide format
+
+```{r}
+library(dplyr)
+library(tidyverse)
+
+#add in age data
+BKLG_ages <- read.csv("BKLG ages.csv")
+BKLG_ages <- BKLG_ages %>% mutate(ID = tolower(ID))
+
+data_2_sounds
+df_2sounds_age <- full_join(data_2_sounds,BKLG_ages, by="ID")
+
+all_data_df_age <-full_join(all_data_df,BKLG_ages, by="ID") 
+all_data_df_age <- all_data_df_age %>% drop_na()
+
+#pivot_data_2_sounds <- data_2_sounds %>% pivot_wider(names_from = sound, values_from = bias, values_fill = NA)
+#pivot_data_2_sounds
+
+
+```
+
+```{r}
+age_bias_data <- all_data_df_age %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+                                      group_by(ID,Range,sound) %>% 
+                                      summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      mutate(bias = ifelse(sound == "spiky",-1*bias,bias)) %>%
+                                      group_by(Range,sound) %>%
+                                      summarize(mean_bias = mean(bias),
+                                                sd_bias = sd(bias),
+                                                se_bias=sd_bias/sqrt(n())) %>%
+                                      ungroup() #%>%
+                                      #mutate(stimulus = fct_reorder2(stimulus, sound, mean_bias))
+
+age_bias_data_points <- all_data_df_age %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+                                      group_by(ID,Range,sound) %>% 
+                                      summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      ungroup() %>%
+                                      mutate(bias = ifelse(sound == "spiky",-1*bias,bias)) %>%
+                                      mutate(bias_round = round_any(bias,0.25)) %>%
+                                      group_by(Range,sound,bias_round) %>%
+                                      summarise(Count = n())
+```
+
+```{r}
+ggplot() +
+  geom_col(age_bias_data, mapping = aes(x = sound, y = mean_bias), color = "black", fill = NA) +
+  geom_point(age_bias_data_points, mapping = aes(x = sound, y = bias_round, size = Count, color = sound)) +
+  geom_col(age_bias_data, mapping = aes(x = sound, y = mean_bias, fill = sound), alpha = 0.5) +
+  geom_point(age_bias_data, mapping = aes(x = sound, y = mean_bias)) +
+  geom_errorbar(age_bias_data, mapping = aes(x = sound, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1) +
+  theme_classic() +
+  facet_wrap("Range") +
+  ylim(-0.5,0.5) +
+  #theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  ylab("Bias") +
+  xlab("Sound")
+```
+
+
+means graph 
+```{r}
+data_means <- data_2_sounds %>% 
+  group_by(sound, group) %>% # Group the data by sound
+  summarize(mean_bias=mean(bias), 
+            sd_bias=sd(bias), # Create variable with sd of cty per group
+            N_bias=n(), # Create new variable N of cty per group
+            se=sd_bias/sqrt(N_bias), 
+            upper_limit=mean_bias+se, # Upper limit
+            lower_limit=mean_bias-se) # Lower limit) # Create variable with se of cty per group) # Create new variable which is the mean of bias
+
+ggplot(data_means, aes(x=sound, y=mean_bias)) + 
+  geom_bar(stat="identity", width=0.5) + 
+  geom_errorbar(aes(ymin=lower_limit, ymax=upper_limit), width=0.75) +
+  facet_wrap(~ group) +
+  #geom_point(data_2_sounds, aes(y=sound, x=bias)) +
+  theme_light()+
+  ylim(0,1)
+
+#jitter plot
+p1 <- ggplot() + 
+  geom_bar(data = data_means,
+           aes(x=sound, y=mean_bias), stat="identity", width=0.5) + 
+  geom_errorbar(data = data_means, aes(x=sound, ymin=lower_limit, ymax=upper_limit), width=0.40) + 
+  geom_jitter(data = data_2_sounds, aes(x=sound, y=bias), height = 0, alpha=.5) +
+  theme_light()+
+  facet_wrap(~ group) +
+  ylim(0,1) +
+  ylab("choice bias")
+
+p1  
+
+```
+
+MAIN PLOT
+```{r}
+
+p1 <- ggplot() + 
+  geom_bar(data = data_means,
+           aes(x=sound, y=mean_bias, fill = sound), stat="identity", width=0.5) + 
+  geom_errorbar(data = data_means, aes(x=sound, ymin=lower_limit, ymax=upper_limit), width=0.40) + 
+  geom_count(data = data_2_sounds, aes(x=sound, y=bias)) +
+  scale_size_continuous(breaks = c(2, 4, 6, 8, 10, 12, 14)) +
+  theme_light()+
+  facet_wrap(~ group) +
+  ylim(0,1) +
+  ylab("choice bias")
+
+p1
+
+ggsave("p1.png")
+```
+
+
+```{r}
+library(emmeans)
+#plotting
+ggplot(data_all_biases, aes(x = interaction(congruent,voicing,sep=", "), y = bias, 
+                            fill = interaction(congruent,voicing,sep=", ")))+
+  geom_boxplot()+
+  #geom_boxplot(aes(x = congruent, y = predict(mi_v_c_vt), color = voicing))+
+  ylim(0,1.25) +
+  facet_wrap(~ vowel_type) +
+  scale_fill_manual(values = c(voiced_color,unvoiced_color,
+                               "pink","red")) +
+  theme_light() +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  xlab("Congruency") +
+  ylab("Bias") +
+  stat_compare_means(comparisons = my_comparisons, label.y = c(1.2,1.1,1.2,1.1),
+                     label = "p.signif", hide.ns = TRUE)
+
+
+data_means$new_var <- paste(data_means$group,data_means$sound, sep = "_" )
+my_comparisons <- list( c("adult_round", "child_round"),
+                          c("adult_spiky", "child_spiky"))
+
+pfacet_sound <- ggplot() + 
+  geom_bar(data = data_means,
+           aes(x=new_var, y=mean_bias, fill = sound), stat="identity", width=0.5) + 
+  geom_errorbar(data = data_means, aes(x=new_var, ymin=lower_limit, ymax=upper_limit), width=0.40) + 
+  geom_count(data = data_2_sounds, aes(x=group, y=bias)) +
+  scale_size_continuous(breaks = c(2, 4, 6, 8, 10, 12, 14)) +
+   stat_compare_means(comparisons = my_comparisons, label.y = c(1.1),
+                     label = "p.signif", hide.ns = TRUE)+
+  theme_light()+
+  facet_wrap(~ sound) +
+  ylim(0,1.2) +
+  ylab("choice bias") 
+ 
+
+pfacet_sound
+ggsave("pfacet_sound.png")
+```
+
+
+
+4 sounds, pivoting the 4_sound data to wide format
+
+```{r}
+data_4_sounds
+pivot_data_4_sounds <- data_4_sounds %>% ungroup() %>% select(-c(sound)) %>%
+                           pivot_wider(names_from = stimulus, values_from = bias, values_fill = NA) 
+                            
+pivot_data_4_sounds
+```
+
+```{r}
+full_bias_df <- full_join(pivot_data_2_sounds, pivot_data_4_sounds, by="ID")
+full_bias_df
+```
+
+
+
+

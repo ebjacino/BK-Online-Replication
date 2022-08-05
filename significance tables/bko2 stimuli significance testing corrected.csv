@@ -1,0 +1,17 @@
+0,Stimulus,p-value ,significance (difference from chance)
+1,dada,0.000100454,significant
+2,didi,0.821068483,nonsignificant
+3,fafa,8.53E-06,significant
+4,fifi,1,nonsignificant
+5,kaka,0.000304565,significant
+6,kiki,5.68E-09,significant
+7,lala,5.16E-09,significant
+8,lili,0.003908313,significant
+9,mama,8.44E-10,significant
+10,mimi,0.137133582,nonsignificant
+11,sasa,0.001034211,significant
+12,sisi,1,nonsignificant
+13,tata,5.11E-06,significant
+14,titi,3.44E-10,significant
+15,zaza,0.000416422,significant
+16,zizi,2.22E-10,significant

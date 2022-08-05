@@ -1,0 +1,297 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+```{r}
+round_any <- function(x, accuracy, f=round){f(x/ accuracy) * accuracy}
+```
+
+Colors
+```{r}
+angular_color = "#E01A4F"
+curved_color = "#FFC05C"
+```
+
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+library(scales)
+library(dplyr)
+```
+
+```{r}
+all_files <- list.files("LG CSV files Looped") #79 items 5/12/22
+first_file <- TRUE
+
+#Adds ID code onto each trial, binds all individual csvs into one large dataframe
+for(i in 1:length(all_files)){
+  if(grepl("bk",all_files[i])){
+    print(all_files[i])
+    if(first_file){
+      all_data_df <- read.csv(paste0("LG CSV files Looped/",all_files[i]))
+      all_data_df <- all_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      first_file <- FALSE
+    }
+    else{
+      new_data_df <- read.csv(paste0("LG CSV files Looped/",all_files[i]))
+      new_data_df <- new_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      all_data_df <- rbind(all_data_df,new_data_df)
+    }
+  }
+}
+
+unique(all_data_df$ID) #79 IDs
+
+#filter out the NAs
+all_data_df <- all_data_df %>% filter(!is.na(correct))
+
+all_data_df <- all_data_df %>% mutate(group = ifelse(substr(ID,4,4)=="1","adult","child"))
+
+#CALCULATE CHOICE BIAS
+data_2_sounds <- all_data_df %>% group_by(ID,sound,group) %>%
+  summarise(bias = sum(correct)/n())
+
+#85 files 5/18
+
+```
+
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(emmeans)
+
+#add in age data
+BKLG_ages <- read.csv("BKLG ages.csv")
+unique(BKLG_ages$Range)
+BKLG_ages <- BKLG_ages %>% mutate(ID = tolower(ID)) %>% select(ID,Age,Range)
+
+#data_2_sounds
+df_2sounds_age <- full_join(data_2_sounds,BKLG_ages, by="ID")
+
+all_data_df_age <- full_join(all_data_df,BKLG_ages, by="ID") %>% drop_na()
+
+unique(all_data_df_age$ID)
+unique(all_data_df_age$Range)
+
+all_data_df_age2 <- all_data_df_age %>% drop_na() %>% 
+                  group_by(ID, Range,sound) %>%
+                  mutate(bias = sum(correct)/n() - 0.5) 
+
+#pivot_data_2_sounds <- data_2_sounds %>% pivot_wider(names_from = sound, values_from = bias, values_fill = NA)
+#pivot_data_2_sounds
+
+
+```
+
+```{r}
+age_bias_data <- all_data_df_age %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+                                      group_by(ID,Range,sound) %>% 
+                                      summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      mutate(bias = ifelse(sound == "spiky",-1*bias,bias)) %>%
+                                      group_by(Range,sound) %>%
+                                      summarize(mean_bias = mean(bias),
+                                                sd_bias = sd(bias),
+                                                se_bias=sd_bias/sqrt(n()),
+                                                N=n()) %>%
+                                      ungroup() #%>%
+                                      #mutate(stimulus = fct_reorder2(stimulus, sound, mean_bias))
+
+age_bias_data_points <- all_data_df_age %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+                                      group_by(ID,Range,sound) %>% 
+                                      summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      ungroup() %>%
+                                      mutate(bias = ifelse(sound == "spiky",-1*bias,bias)) %>%
+                                      mutate(bias_round = round_any(bias,0.25)) %>%
+                                      group_by(Range,sound,bias_round) %>%
+                                      summarise(Count = n())
+```
+
+```{r}
+#cols <- hue_pal()(2)
+
+age_plot <-ggplot() +
+  geom_col(age_bias_data, mapping = aes(x = sound, y = mean_bias), color = "black", fill = NA) +
+  geom_point(age_bias_data_points, mapping = aes(x = sound, y = bias_round, size = Count, color = sound)) +
+  geom_col(age_bias_data, mapping = aes(x = sound, y = mean_bias, fill = sound), alpha = 0.5) +
+  geom_point(age_bias_data, mapping = aes(x = sound, y = mean_bias)) +
+  geom_errorbar(age_bias_data, mapping = aes(x = sound, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1) +
+  theme_classic() +
+  facet_wrap("Range") +
+  ylim(-0.5,0.5) +
+  ylab("Bias") +
+  #scale_color_manual(values = rev(cols)) +
+  #scale_fill_manual(values = rev(cols)) +
+  scale_fill_manual(values = c(angular_color,curved_color)) +
+  scale_color_manual(values = c(angular_color,curved_color)) +
+  xlab("Sound")
+
+age_plot
+
+#ggsave("graphs/presentation graphs/6-8_age_plot_bko1.png", width = 6, height = 4)
+
+
+```
+
+T TESTING ALL 6
+```{r}
+m <- glm(bias ~ 0+Range:sound, data = all_data_df_age2)
+summary(m)
+
+bko1_bias_table <-summary.glm(m)$coefficients
+
+#write.csv(bko1_bias_table, "significance tables/bko1_bias_table.csv")
+
+
+
+
+#checking 
+age_sound <- all_data_df_age2 %>% filter(sound == "spiky") %>% filter(Range == "6 to 8")
+# One-sample t-test
+res <- t.test(age_sound$bias, mu = 0)
+# Printing the results: significantly different from zero
+res 
+```
+how to tell if the age groups are different from each other
+
+```{r}
+m_mult <- glm(bias ~ Range*sound, data = all_data_df_age2)
+m_add <- glm(bias ~ Range+sound, data = all_data_df_age2)
+ICtab(m_mult, m_add)
+
+Anova(m_mult)
+
+contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
+bko1_difference_table <-contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
+
+write.csv(bko1_difference_table, "significance tables/bko1_difference_table.csv")
+```
+
+
+
+
+
+means graph 
+```{r}
+data_means <- data_2_sounds %>% 
+  group_by(sound, group) %>% # Group the data by sound
+  summarize(mean_bias=mean(bias), 
+            sd_bias=sd(bias), # Create variable with sd of cty per group
+            N_bias=n(), # Create new variable N of cty per group
+            se=sd_bias/sqrt(N_bias), 
+            upper_limit=mean_bias+se, # Upper limit
+            lower_limit=mean_bias-se) # Lower limit) # Create variable with se of cty per group) # Create new variable which is the mean of bias
+
+ggplot(data_means, aes(x=sound, y=mean_bias)) + 
+  geom_bar(stat="identity", width=0.5) + 
+  geom_errorbar(aes(ymin=lower_limit, ymax=upper_limit), width=0.75) +
+  facet_wrap(~ group) +
+  #geom_point(data_2_sounds, aes(y=sound, x=bias)) +
+  theme_light()+
+  ylim(0,1)
+
+#jitter plot
+p1 <- ggplot() + 
+  geom_bar(data = data_means,
+           aes(x=sound, y=mean_bias), stat="identity", width=0.5) + 
+  geom_errorbar(data = data_means, aes(x=sound, ymin=lower_limit, ymax=upper_limit), width=0.40) + 
+  geom_jitter(data = data_2_sounds, aes(x=sound, y=bias), height = 0, alpha=.5) +
+  theme_light()+
+  facet_wrap(~ group) +
+  ylim(0,1) +
+  ylab("choice bias")
+
+p1  
+
+```
+
+MAIN PLOT
+```{r}
+
+p1 <- ggplot() + 
+  geom_bar(data = data_means,
+           aes(x=sound, y=mean_bias, fill = sound), stat="identity", width=0.5) + 
+  geom_errorbar(data = data_means, aes(x=sound, ymin=lower_limit, ymax=upper_limit), width=0.40) + 
+  geom_count(data = data_2_sounds, aes(x=sound, y=bias)) +
+  scale_size_continuous(breaks = c(2, 4, 6, 8, 10, 12, 14)) +
+  theme_light()+
+  facet_wrap(~ group) +
+  ylim(0,1) +
+  ylab("choice bias")
+
+p1
+
+ggsave("p1.png")
+```
+
+
+```{r}
+library(emmeans)
+#plotting
+ggplot(data_all_biases, aes(x = interaction(congruent,voicing,sep=", "), y = bias, 
+                            fill = interaction(congruent,voicing,sep=", ")))+
+  geom_boxplot()+
+  #geom_boxplot(aes(x = congruent, y = predict(mi_v_c_vt), color = voicing))+
+  ylim(0,1.25) +
+  facet_wrap(~ vowel_type) +
+  scale_fill_manual(values = c(voiced_color,unvoiced_color,
+                               "pink","red")) +
+  theme_light() +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  xlab("Congruency") +
+  ylab("Bias") +
+  stat_compare_means(comparisons = my_comparisons, label.y = c(1.2,1.1,1.2,1.1),
+                     label = "p.signif", hide.ns = TRUE)
+
+
+data_means$new_var <- paste(data_means$group,data_means$sound, sep = "_" )
+my_comparisons <- list( c("adult_round", "child_round"),
+                          c("adult_spiky", "child_spiky"))
+
+pfacet_sound <- ggplot() + 
+  geom_bar(data = data_means,
+           aes(x=new_var, y=mean_bias, fill = sound), stat="identity", width=0.5) + 
+  geom_errorbar(data = data_means, aes(x=new_var, ymin=lower_limit, ymax=upper_limit), width=0.40) + 
+  geom_count(data = data_2_sounds, aes(x=group, y=bias)) +
+  scale_size_continuous(breaks = c(2, 4, 6, 8, 10, 12, 14)) +
+   stat_compare_means(comparisons = my_comparisons, label.y = c(1.1),
+                     label = "p.signif", hide.ns = TRUE)+
+  theme_light()+
+  facet_wrap(~ sound) +
+  ylim(0,1.2) +
+  ylab("choice bias") 
+ 
+
+pfacet_sound
+ggsave("pfacet_sound.png")
+```
+
+
+
+4 sounds, pivoting the 4_sound data to wide format
+
+```{r}
+data_4_sounds
+pivot_data_4_sounds <- data_4_sounds %>% ungroup() %>% select(-c(sound)) %>%
+                           pivot_wider(names_from = stimulus, values_from = bias, values_fill = NA) 
+                            
+pivot_data_4_sounds
+```
+
+```{r}
+full_bias_df <- full_join(pivot_data_2_sounds, pivot_data_4_sounds, by="ID")
+full_bias_df
+```
+
+
+

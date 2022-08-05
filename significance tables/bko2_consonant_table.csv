@@ -1,0 +1,4 @@
+contrast,estimate,SE,z.ratio,p.value,,consonant contrast,estimate,SE,z.ratio,p.value
+fricative - sonorant,0.276073307,0.030165756,9.151877525,<.0001,,fricative - sonorant,0.276,0.03,9.152,<.0001
+fricative - stop,-0.135001556,0.026913576,-5.016113703,<.0001,,fricative - stop,-0.135,0.027,-5.016,<.0001
+sonorant - stop,-0.411074863,0.030146417,-13.63594441,<.0001,,sonorant - stop,-0.411,0.03,-13.636,<.0001

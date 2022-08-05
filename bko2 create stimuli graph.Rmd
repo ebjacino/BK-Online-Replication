@@ -1,0 +1,88 @@
+---
+title: "Making Graphs For Elisabeth"
+output: html_notebook
+---
+
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+library(forcats)
+library(bbmle)      # for ICtab()
+library(car)        # for Anova()
+
+```
+
+```{r}
+round_any <- function(x, accuracy, f=round){f(x/ accuracy) * accuracy}
+```
+
+
+```{r}
+all_data_df <- read.csv("all_data_df.csv")
+```
+
+```{r}
+stimulus_bias_data <- all_data_df %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+                                      group_by(ID,stimulus,sound) %>% 
+                                      summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      mutate(bias = ifelse(sound == "angular",-1*bias,bias)) %>%
+                                      group_by(stimulus,sound) %>%
+                                      summarize(mean_bias = mean(bias),
+                                                sd_bias = sd(bias),
+                                                se_bias=sd_bias/sqrt(n())) %>%
+                                      ungroup() %>%
+                                      mutate(stimulus = fct_reorder2(stimulus, sound, mean_bias))
+
+stimulus_bias_data_points <- all_data_df %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+                                      group_by(ID,stimulus,sound) %>% 
+                                      summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      ungroup() %>%
+                                      mutate(bias = ifelse(sound == "angular",-1*bias,bias)) %>%
+                                      mutate(bias_round = round_any(bias,0.25)) %>%
+                                      group_by(stimulus,sound,bias_round) %>%
+                                      summarise(Count = n())
+```
+
+
+```{r}
+ggplot() +
+  geom_col(stimulus_bias_data, mapping = aes(x = stimulus, y = mean_bias), color = "black", fill = NA) +
+  geom_point(stimulus_bias_data_points, mapping = aes(x = stimulus, y = bias_round, size = Count, color = sound)) +
+  geom_col(stimulus_bias_data, mapping = aes(x = stimulus, y = mean_bias, fill = sound), alpha = 0.5) +
+  geom_point(stimulus_bias_data, mapping = aes(x = stimulus, y = mean_bias)) +
+  geom_errorbar(stimulus_bias_data, mapping = aes(x = stimulus, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1) +
+  theme_classic() +
+  ylim(-0.5,0.5) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  ylab("Bias") +
+  xlab("Stimulus")
+
+ggsave("poster graphs/all_stim_graph.png")
+```
+
+### Binomial
+
+```{r}
+
+m0 <- glm(correct ~ 1, data = all_data_df, family = binomial)
+m1 <- glm(correct ~ 0+stimulus, data = all_data_df, family = binomial)
+
+summary(m1)
+plogis(coef(m1))
+
+ICtab(m0, m1)
+Anova(m1)
+plogis(coef(m1))
+```
+
+### Better way to do it
+
+```{r}
+bin_probs_df <- all_data_df %>% group_by(stimulus) %>%
+                                summarise(k = sum(correct),
+                                          n = n()) %>%
+                                mutate(prob = dbinom(k,n,0.5))
+```
+
