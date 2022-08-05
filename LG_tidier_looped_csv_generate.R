@@ -122,7 +122,7 @@ for(file in rds_files){
   
 }
 
-#######
+####### WRITING CODE TO ORGANIZE LG DATA FOR QUICKER ANALYSIS
 data_exp_lg_p <- data_exp_lg %>% separate(stimulus, c("type","number"), sep = "/") 
 
 data_exp_lg_p_tester <- data_exp_lg_p %>% group_by(type) %>% 
@@ -131,17 +131,4 @@ data_exp_lg_p_tester <- data_exp_lg_p %>% group_by(type) %>%
                                           pivot_wider(names_from = type, values_from = c(number,response)) %>%
                                           select(!response_targets)
 
-
-
-
-#write.csv(data_exp_bk, "LG CSV files/blg007_bk.csv") 
-#write.csv(data_exp_lg, "LG CSV files/blg007_lg.csv") 
-
-
-#CALCULATE CHOICE BIAS
-data_2_sounds <- data_exp_bk %>% group_by(sound) %>%
-  summarise(round_bias = sum(correct)/n())
-
-data_4_sounds <- data_exp_bk %>% group_by(stimulus) %>%
-  summarise(round_bias = sum(correct)/n())
 
