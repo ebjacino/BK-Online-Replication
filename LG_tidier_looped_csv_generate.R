@@ -98,14 +98,14 @@ for(file in rds_files){
                                                               NA))) %>%
     filter(!is.na(correct))
   
-#adding columns to LG files to do analysis 
-  data_exp_lg <- data_exp_lg %>% separate(stimulus, c("type","number"), sep = "/") 
+#adding columns to LG files to do analysis ############
+  data_exp_lg <- data_exp_lg %>% separate(stimulus, c("type","image_ID"), sep = "/") 
   
   data_exp_lg <- data_exp_lg %>% group_by(type) %>% 
                                 mutate(trial_num = row_number()) %>% 
                                 ungroup() %>%
-                                pivot_wider(names_from = type, values_from = c(number,response)) %>%
-                                select(!response_targets)
+                                pivot_wider(names_from = type, values_from = c(image_ID,response)) %>%
+                                select(!c(trial_type,response_targets))
 
   
   
@@ -121,14 +121,4 @@ for(file in rds_files){
   write.csv(data_exp_lg, file_path_lg)
   
 }
-
-####### WRITING CODE TO ORGANIZE LG DATA FOR QUICKER ANALYSIS
-data_exp_lg_p <- data_exp_lg %>% separate(stimulus, c("type","number"), sep = "/") 
-
-data_exp_lg_p_tester <- data_exp_lg_p %>% group_by(type) %>% 
-                                          mutate(trial_num = row_number()) %>% 
-                                          ungroup() %>%
-                                          pivot_wider(names_from = type, values_from = c(number,response)) %>%
-                                          select(!response_targets)
-
 
