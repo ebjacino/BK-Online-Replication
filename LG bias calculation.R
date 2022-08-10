@@ -1,5 +1,6 @@
 library(dplyr)
 library(readxl)
+library("writexl")
 
 all_files <- list.files("LG tidy csv")
 first_file <- TRUE
@@ -29,4 +30,26 @@ pairs_table <- read_excel("LG_pair_table.xlsx")
 LG_data_df_combined <- full_join(LG_data_df,target_table, by="image_ID_targets")
 LG_data_df_combined <- full_join(LG_data_df_combined,pairs_table, by="image_ID_pairs")
 
+#if the the global choice is on the left and they make the "z" response, then put G in the choice column, etc
+LG_data_df_combined_bias <- LG_data_df_combined %>% mutate(choice = ifelse(response_pairs == left_key &
+                                                                             target_global == pair_left_global,
+                                                                           "global", 
+                                                                           ifelse(response_pairs == left_key &
+                                                                                    target_local == pair_left_local,
+                                                                                  "local",
+                                                                         ifelse(response_pairs == right_key &
+                                                                                  target_global == pair_right_global,
+                                                                                "global",
+                                                                          ifelse(response_pairs == right_key &
+                                                                                    target_local == pair_right_local,
+                                                                                  "local",
+                                                                                 NA)))))
 
+write_xlsx(LG_data_df_combined_bias,"LG_data_df_combined_bias.xlsx")
+
+                                                                           
+                                                                           
+                                                                           
+                                                                           
+                                                                           
+                                                                         
