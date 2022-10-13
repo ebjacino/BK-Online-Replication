@@ -4,7 +4,8 @@ library("writexl")
 library(ggplot2)
 library(ggpubr)
 round_any <- function(x, accuracy, f=round){f(x/ accuracy) * accuracy}
-
+left_key = "z"
+right_key = "m"
 
 all_files <- list.files("LG tidy csv")
 first_file <- TRUE
@@ -34,9 +35,12 @@ age_table <- age_table %>% mutate(ID = tolower(ID)) #%>% select(ID,Age,Range)
 
 #full_join to combine
 LG_data_df_combined <- full_join(LG_data_df,target_table, by="image_ID_targets")
-LG_data_df_combined <- full_join(LG_data_df_combined,pairs_table, by="image_ID_pairs")
+#LG_data_df has no confound image IDs so they are populating as NAs
+LG_data_df_combined <- full_join(LG_data_df_combined,pairs_table, by="image_ID_pairs")%>%
+  filter(!is.na(ID))
 LG_data_df_combined <- full_join(LG_data_df_combined,age_table, by="ID")
 
+unique(LG_data_df_combined$ID) #=79
 
 #if the the global choice is on the left and they make the "z" response, then put G in the choice column, etc
 LG_data_df_combined_bias <- LG_data_df_combined %>% mutate(choice = ifelse(response_pairs == left_key &
@@ -61,7 +65,11 @@ LG_data_df_combined_bias <- LG_data_df_combined %>% mutate(choice = ifelse(respo
 LG_data_df_combined_bias <- LG_data_df_combined_bias %>% mutate(choice_number = ifelse(choice == "global", 1, 0)) %>%
                             filter(!is.na(choice))
 
+unique(LG_data_df_combined_bias$ID) #= 79
+
 LG_bias_ind <- LG_data_df_combined_bias %>% group_by(ID) %>% summarise(global_bias = sum(choice_number)/n())
+
+unique(LG_bias_ind$ID) #= 79
 
 LG_bias_data <- LG_data_df_combined_bias %>% group_by(ID,Range) %>% 
                                     summarise(global_bias = sum(choice_number)/n()) %>% 
@@ -70,6 +78,7 @@ LG_bias_data <- LG_data_df_combined_bias %>% group_by(ID,Range) %>%
                                     sd_bias = sd(global_bias),
                                     se_bias=sd_bias/sqrt(n()),
                                     N=n()) %>% ungroup()
+#^this one has NAs
 
 LG_bias_data_points <- LG_data_df_combined_bias  %>% group_by(ID,Range) %>% 
                        summarise(global_bias = sum(choice_number)/n()) %>% 
@@ -94,6 +103,7 @@ LG_bias_plot <-ggplot() +
   xlab("Age")
 
 LG_bias_plot
+
                                 
 
                                               

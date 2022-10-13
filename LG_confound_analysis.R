@@ -138,21 +138,69 @@ LG_data_df_combined_bias_c <- LG_data_df_combined_bias_c %>% mutate(choice_numbe
 LG_bias_ind_c <- LG_data_df_combined_bias_c %>% group_by(ID) %>% summarise(global_bias = sum(choice_number)/n())
 
 
-
-
-
-#LG_confound_trials <- LG_data_df_combined_bias %>% mutate(confound_participant = ifelse(ID %in% c("blg166", "blg167",
-                                                                                                  #"blg168", "blg169",
-                                                                                                  #"blg170"), 1, 0))
-
-
-
 #calculate global bias for confound trials and normal trials 2nd try
 LG_confound_trials_c <- LG_data_df_combined_bias_c %>% 
-  group_by(ID, target_confound) %>% #mutate(trials = n()) %>%
+  filter(!ID  %in% c("blg040","blg041"))  %>%
+  group_by(ID, target_confound) %>% 
   summarise(global_bias = sum(choice_number)/n(), trials = n(), global_choices = sum(choice_number))
 
 #write_xlsx(LG_confound_trials_c,"LG_confound_trials_c.xlsx")
+
+##########t.testing analysis 
+
+#what is the difference between confound trials or non confound trials participants?
+# independent sample t-test (2 groups)
+res1 <- t.test(global_bias ~ target_confound, data = LG_confound_trials_c)
+# Printing the results
+res1 
+
+
+#is there a significant difference between within participants(within t test), and also between the non-confound
+#trials in people who did and did not see the confound (between subjects t test)
+#get a measure for each within, then compare that across participants as well 
+
+LG_bias_confound <- LG_confound_trials_c %>% 
+  group_by(target_confound) %>%
+  summarise(mean_bias = mean(global_bias),
+            sd_bias = sd(global_bias),
+            se_bias=sd_bias/sqrt(n()))
+
+#compare mean bias between regular participants and those who did the confound. just adults here
+#and filter adults only from LG_data_df_combined_bias
+#full join LG_data_df_combined_bias with LG_data_df_combined_bias_c  
+
+adults_no_confound <- LG_data_df_combined_bias %>% filter(Range == "Adult") %>%
+  select(-c(Age, Range)) %>% mutate(participant_c = 0)
+
+LG_data_df_combined_bias_c <- LG_data_df_combined_bias_c %>% filter(!ID  %in% c("blg040","blg041")) %>% mutate(participant_c = 1)
+
+#below dataset is making a df of participants who did see the confounded trials, but deleting the confound trials themselves
+LG_confounded_noConfoundTrials <- LG_data_df_combined_bias_c %>% filter(!ID  %in% c("blg040","blg041")) %>% 
+                                  mutate(participant_c = 1) %>%
+                                  filter(!target_confound == 1)
+
+
+#bind the 2 data frames together
+adults_confound_comparison <- rbind(adults_no_confound,LG_confounded_noConfoundTrials)
+
+#compare those who got the confound trials to those who did not
+confound_comparison <-adults_confound_comparison %>% group_by(participant_c, ID) %>%
+  summarise(global_bias = sum(choice_number)/n(), global_choices = sum(choice_number)) %>% ungroup() %>%
+  group_by(participant_c) %>%
+  summarise(mean_bias = mean(global_bias),
+            sd_bias = sd(global_bias),
+            se_bias=sd_bias/sqrt(n()))
+
+#t.testing analysis 
+#compare those who got the confound trials to those who did not
+confound_comparison_analysis <-adults_confound_comparison %>% group_by(participant_c, ID) %>%
+  summarise(global_bias = sum(choice_number)/n())
+
+#what is the difference between confound trials or non confound trials participants?
+# independent sample t-test (2 groups)
+res <- t.test(global_bias ~ participant_c, data = confound_comparison_analysis)
+# Printing the results
+res 
 
 
 
