@@ -1,0 +1,134 @@
+Wanted to try making a new way to graph things. see LG Bias Calculation for the normal 
+scale of global bias score as a proportion value
+
+This is based off of Poire 2011, where they calculated local-global and ploted positive and negative values 
+so with 24 trials, a +24 means all local and -24 means all global 
+
+
+setup:
+```{r}
+library(dplyr)
+library(tidyverse)
+library(readxl)
+library("writexl")
+library(ggplot2)
+library(ggpubr)
+round_any <- function(x, accuracy, f=round){f(x/ accuracy) * accuracy}
+left_key = "z"
+right_key = "m"
+
+all_files <- list.files("LG tidy csv")
+first_file <- TRUE
+
+#Adds ID code onto each trial, binds all individual csvs into one large dataframe
+for(i in 1:length(all_files)){
+  if(grepl("b",all_files[i])){
+    print(all_files[i])
+    if(first_file){
+      LG_data_df <- read.csv(paste0("LG tidy csv/",all_files[i]))
+      LG_data_df <- LG_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      first_file <- FALSE
+    }
+    else{
+      LGnew_data_df <- read.csv(paste0("LG tidy csv/",all_files[i]))
+      LGnew_data_df <- LGnew_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      LG_data_df <- rbind(LG_data_df,LGnew_data_df)
+    }
+  }
+}
+```
+
+
+```{r}
+#load in the tables of targets and pairs descriptions
+target_table <- read_excel("LG_target_table.xlsx")
+pairs_table <- read_excel("LG_pair_table.xlsx")
+age_table <- read_excel("LG_ages.xlsx")
+age_table <- age_table %>% mutate(ID = tolower(ID)) #%>% select(ID,Age,Range)
+
+#full_join to combine
+LG_data_df_combined <- full_join(LG_data_df,target_table, by="image_ID_targets")
+#LG_data_df has no confound image IDs so they are populating as NAs
+LG_data_df_combined <- full_join(LG_data_df_combined,pairs_table, by="image_ID_pairs")%>%
+  filter(!is.na(ID))
+LG_data_df_combined <- full_join(LG_data_df_combined,age_table, by="ID")
+#if the the global choice is on the left and they make the "z" response, then put G in the choice column, etc
+LG_data_df_combined_bias <- LG_data_df_combined %>% mutate(choice = ifelse(response_pairs == left_key &
+                                                                             target_global == pair_left_global,
+                                                                           "global", 
+                                                                           ifelse(response_pairs == left_key &
+                                                                                    target_local == pair_left_local,
+                                                                                  "local",
+                                                                         ifelse(response_pairs == right_key &
+                                                                                  target_global == pair_right_global,
+                                                                                "global",
+                                                                          ifelse(response_pairs == right_key &
+                                                                                    target_local == pair_right_local,
+                                                                                  "local",
+                                                                                 NA)))))
+LG_data_df_combined_bias <- LG_data_df_combined_bias %>% filter(!is.na(choice))
+LG_data_df_combined_bias <- LG_data_df_combined_bias %>% mutate(choice_number = ifelse(choice == "global", 1, 0)) %>%
+                            filter(!is.na(choice))
+```
+
+new calculation: sum(global)-sum(local)
+
+need to group_by(ID, choice)
+
+```{r}
+LG_data_df_combined_bias %>% group_by(ID) %>% count(choice)
+
+LG_count <-LG_data_df_combined_bias %>% group_by(ID) %>% count(choice)
+LG_count_p <- LG_count %>% pivot_wider(names_from = choice, values_from = n) %>% mutate_all(~replace(., is.na(.), 0))
+#new column with local-global
+LG_count_p <- LG_count_p %>% mutate(GminusL = global-local) %>% mutate(LG_group = ifelse(GminusL >0, "global", "local"))
+
+```
+adding the local-global value to the LG_data_df_combined_bias
+
+```{r}
+LG_poirel_all <- full_join(LG_data_df_combined_bias, LG_count_p, by ="ID")
+```
+
+graphing
+```{r}
+#to count choice bias and see how many participants are in each age range
+LG_bias_data <- LG_data_df_combined_bias %>% group_by(ID,Range) %>% 
+                                    summarise(global_bias = sum(choice_number)/n()) %>% 
+                                    group_by(Range) %>%
+                                    summarize(mean_bias = mean(global_bias),
+                                    sd_bias = sd(global_bias),
+                                    se_bias=sd_bias/sqrt(n()),
+                                    N=n()) %>% ungroup()
+
+#2 rows for each ID- local group and global group
+LG_bias_poirel <- LG_poirel_all %>% group_by(Range, LG_group) %>%
+                                    summarize(mean_bias = mean(GminusL),
+                                              #is this making it too small because it's divided by group?
+                                    sd_bias = sd(GminusL),
+                                    se_bias=sd_bias/sqrt(n())) %>% ungroup()
+
+LG_poirel_points <- LG_poirel_all  %>% group_by(ID,Range, LG_group) %>%
+                        mutate(bias_round = round_any(GminusL,5)) %>%  ungroup() %>%
+                        group_by(Range,bias_round,LG_group) %>%
+                        summarise(Count = length(unique(ID)))
+
+#GRAPH TIME
+LG_poirel_plot <-ggplot() +
+  geom_col(LG_bias_poirel, mapping = aes(x = interaction(LG_group,Range), y = mean_bias), color = "black", fill = NA) +
+  geom_point(LG_poirel_points, mapping = aes(x = interaction(LG_group,Range), y = bias_round, size = Count, color = Range)) +
+  geom_col(LG_bias_poirel, mapping = aes(x = interaction(LG_group,Range), y = mean_bias, fill = Range), alpha = 0.5) +
+  geom_point(LG_bias_poirel, mapping = aes(x = interaction(LG_group,Range), y = mean_bias)) +
+  geom_errorbar(LG_bias_poirel, mapping = aes(x = interaction(LG_group,Range), y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1) +
+  theme_classic() +
+  #facet_wrap("Range") +
+  #ylim(-0.5,0.5) +
+  ylab("Global Bias") +
+  #scale_color_manual(values = rev(cols)) +
+  #scale_fill_manual(values = rev(cols)) +
+  xlab("global and local groups in each age range") +
+  ylab("<local bias, global bias>")
+
+LG_poirel_plot
+```
+

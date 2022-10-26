@@ -1,0 +1,311 @@
+calculating bk bias scores for all participants (this is non confound so far)
+
+Colors
+```{r}
+angular_color = "#E01A4F"
+curved_color = "#FFC05C"
+```
+
+generating the csvs:
+```{r}
+library(dplyr)
+library(stringr)
+library(tidyverse)
+
+correct_stim_list = c("sound/baba_rep.wav" = "bouba",
+                      "sound/gaga_rep.wav" = "bouba",
+                      "sound/keekee.wav" = "kiki",
+                      "sound/teetee.wav" = "kiki")
+
+left_key = "z"
+right_key = "m"
+round_any <- function(x, accuracy, f=round){f(x/ accuracy) * accuracy}
+
+which_is_correct <- function(stimuli,lefts,rights) {
+  
+  #Make a new vector the same length as the number of rows
+  correct_vec <- rep(NA,length(stimuli))
+  
+  #For each row in the dataset....
+  for(i in seq(1:length(stimuli))){
+    
+    #Get the correct type ("Bouba" or "Kiki") by checking in the stim list
+    correct_type <- correct_stim_list[stimuli[i]]
+    
+    #If the correct type is in the left one the correct key was the left key
+    if(grepl(correct_type, lefts[i], fixed = TRUE)){
+      correct_key <- left_key
+    }
+    #If the correct type is in the right one the correct key was the right key
+    else if(grepl(correct_type, rights[i], fixed = TRUE)){
+      correct_key <- right_key
+    }
+    #If it isn't in either something has gone wrong so you'll get an NA
+    else{
+      correct_key <- NA
+    }
+    
+    #Put that correct key in the output vector
+    correct_vec[i] <- correct_key
+  }
+  
+  #Return the final filled in vector
+  return(correct_vec)
+}
+
+#look at the results files
+rds_files <- list.files("LG_DI_five_rds",
+                        pattern = "\\.rds$",
+                        full.names = TRUE)
+
+rds_files
+#change [#] to pick which one to read
+
+for(file in rds_files){
+  print(file)
+  file_id <- str_extract(file,"b[kl]g\\d\\d\\d")
+  
+  data <- readRDS(file)
+  
+  #assign ID
+  participant_ID <- data$results$`sp_id`[[1]]
+  main_data <- data$results$`Main page`[[1]]
+  
+  
+  df <- read.table(text = main_data, sep =",", header = TRUE, stringsAsFactors = FALSE)
+  #df is the raw data, tells you stimulus and responses
+  
+  
+  ##Ben Code ***creating tidy data and choice bias score***
+  
+  #First remove unneeded columns
+  data_cols <- df %>% select(c(trial_type,stimulus,response,left_image,right_image,correct_response,correct)) 
+  
+  #Then Filter practice and experimental trials
+  data_prac <- data_cols %>% filter(grepl("Prac", stimulus, fixed = TRUE))
+  data_exp <- data_cols %>% filter(!grepl("Prac", stimulus, fixed = TRUE)) %>%
+    filter(trial_type  %in% c("bouba-kiki","image-keyboard-response")) %>%
+    filter(stimulus != "img/fixation.png")
+  
+  #filter out BK data 
+  data_exp_bk <-data_exp %>% filter(trial_type == "bouba-kiki")
+  #filter out the LG data
+  data_exp_lg <-data_exp %>% filter(trial_type =="image-keyboard-response") %>%
+    select(c(trial_type, stimulus, response))
+  
+  #Now write a function to find if the left or the right image is "correct"
+  
+  data_exp_bk <- data_exp_bk %>% mutate(correct_response = which_is_correct(stimulus,left_image,right_image))
+  data_exp_bk <- data_exp_bk %>% mutate(correct = ifelse(correct_response == response,
+                                                         1,
+                                                         ifelse(response == left_key | response == right_key,
+                                                                0,
+                                                                NA)))
+  
+  data_exp_bk <- data_exp_bk %>% mutate(sound = ifelse(stimulus %in% c("sound/baba_rep.wav","sound/gaga_rep.wav"),
+                                                       "round",
+                                                       ifelse(stimulus %in% c("sound/teetee.wav","sound/keekee.wav"),
+                                                              "spiky",
+                                                              NA))) %>%
+    filter(!is.na(correct))
+  
+#adding columns to LG files to do analysis ############
+  data_exp_lg <- data_exp_lg %>% separate(stimulus, c("type","image_ID"), sep = "/") 
+  
+  data_exp_lg <- data_exp_lg %>% group_by(type) %>% 
+                                mutate(trial_num = row_number()) %>% 
+                                ungroup() %>%
+                                pivot_wider(names_from = type, values_from = c(image_ID,response)) %>%
+                                select(!c(trial_type,response_targets))
+
+  
+  
+  
+  
+  file_path_bk <- paste0("LG_DI_five_csv/",file_id,"_bk.csv")
+  file_path_lg <- paste0("LG_DI_five_csv/",file_id,"_lg.csv")
+  
+  #file_path_prac <- paste0("LG practice trials/",file_id,".csv")
+  #write.csv(data_prac, file_path_prac)
+  
+  write.csv(data_exp_bk, file_path_bk) 
+  #write.csv(data_exp_lg, file_path_lg)
+  
+}
+
+
+```
+
+
+setup putting together the csvs:
+```{r}
+library(dplyr)
+library(tidyverse)
+library(readxl)
+library("writexl")
+library(ggplot2)
+library(ggpubr)
+round_any <- function(x, accuracy, f=round){f(x/ accuracy) * accuracy}
+left_key = "z"
+right_key = "m"
+
+all_files <- list.files("LG_DI_five_csv")
+first_file <- TRUE
+
+#Adds ID code onto each trial, binds all individual csvs into one large dataframe
+for(i in 1:length(all_files)){
+  if(grepl("bk",all_files[i])){
+    print(all_files[i])
+    if(first_file){
+      bk_data_df <- read.csv(paste0("LG_DI_five_csv/",all_files[i]))
+      bk_data_df <- bk_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      first_file <- FALSE
+    }
+    else{
+      bknew_data_df <- read.csv(paste0("LG_DI_five_csv/",all_files[i]))
+      bknew_data_df <- bknew_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      bk_data_df <- rbind(bk_data_df,bknew_data_df)
+    }
+  }
+}
+
+```
+add in ages
+```{r}
+age_table <- read_excel("LG_ages_5.xlsx")
+age_table <- age_table %>% mutate(ID = tolower(ID)) #%>% select(ID,Age,Range)
+bk_data_combined <- full_join(bk_data_df,age_table, by="ID")
+```
+
+calculate bias BK
+```{r}
+#to count choice bias and see how many participants are in each age range
+bk_bias_data <- bk_data_combined %>% group_by(ID,Range,sound) %>% 
+                                      summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      mutate(bias = ifelse(sound == "spiky",-1*bias,bias)) %>%
+                                      group_by(Range,sound) %>%
+                                      summarize(mean_bias = mean(bias),
+                                                sd_bias = sd(bias),
+                                                se_bias=sd_bias/sqrt(n()),
+                                                N=n()) %>%
+                                      ungroup()
+
+bk_bias_data_points <- bk_data_combined %>% group_by(ID,Range,sound) %>% 
+                                      summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      ungroup() %>%
+                                      mutate(bias = ifelse(sound == "spiky",-1*bias,bias)) %>%
+                                      mutate(bias_round = round_any(bias,0.25)) %>%
+                                      group_by(Range,sound,bias_round) %>%
+                                      summarise(Count = n())
+
+
+```
+bk graph attempt
+```{r}
+bk_range_plot <-ggplot() +
+  geom_col(bk_bias_data, mapping = aes(x = sound, y = mean_bias), color = "black", fill = NA) +
+  geom_point(bk_bias_data_points, mapping = aes(x = sound, y = bias_round, size = Count, color = sound)) +
+  geom_col(bk_bias_data, mapping = aes(x = sound, y = mean_bias, fill = sound), alpha = 0.5) +
+  geom_point(bk_bias_data, mapping = aes(x = sound, y = mean_bias)) +
+  geom_errorbar(bk_bias_data, mapping = aes(x = sound, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1) +
+  theme_classic() +
+  facet_wrap("Range") +
+  ylim(-0.5,0.5) +
+  ylab("Bias") +
+  #scale_color_manual(values = rev(cols)) +
+  #scale_fill_manual(values = rev(cols)) +
+  scale_fill_manual(values = c(angular_color,curved_color)) +
+  scale_color_manual(values = c(angular_color,curved_color)) +
+  xlab("Sound")
+
+bk_range_plot
+```
+
+now trying the same thing with each age (each age its own thing)
+
+calculate bias BK
+```{r}
+#to count choice bias and see how many participants are in each age range
+bk_bias_data_age <- bk_data_combined %>% group_by(ID,Age,sound) %>% 
+                                      summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      mutate(bias = ifelse(sound == "spiky",-1*bias,bias)) %>%
+                                      group_by(Age,sound) %>%
+                                      summarize(mean_bias = mean(bias),
+                                                sd_bias = sd(bias),
+                                                se_bias=sd_bias/sqrt(n()),
+                                                N=n()) %>%
+                                      ungroup()
+
+bk_bias_data_points_age <- bk_data_combined %>% group_by(ID,Age,sound) %>% 
+                                      summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      ungroup() %>%
+                                      mutate(bias = ifelse(sound == "spiky",-1*bias,bias)) %>%
+                                      mutate(bias_round = round_any(bias,0.25)) %>%
+                                      group_by(Age,sound,bias_round) %>%
+                                      summarise(Count = n())
+
+
+```
+bk graph attempt
+```{r}
+bk_range_plot_age <-ggplot() +
+  geom_col(bk_bias_data_age, mapping = aes(x = sound, y = mean_bias), color = "black", fill = NA) +
+  geom_point(bk_bias_data_points_age, mapping = aes(x = sound, y = bias_round, size = Count, color = sound)) +
+  geom_col(bk_bias_data_age, mapping = aes(x = sound, y = mean_bias, fill = sound), alpha = 0.5) +
+  geom_point(bk_bias_data_age, mapping = aes(x = sound, y = mean_bias)) +
+  geom_errorbar(bk_bias_data_age, mapping = aes(x = sound, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1) +
+  theme_classic() +
+  facet_wrap("Age") +
+  ylim(-0.5,0.5) +
+  ylab("Bias") +
+  #scale_color_manual(values = rev(cols)) +
+  #scale_fill_manual(values = rev(cols)) +
+  scale_fill_manual(values = c(angular_color,curved_color)) +
+  scale_color_manual(values = c(angular_color,curved_color)) +
+  xlab("Sound")
+
+bk_range_plot_age
+#ggsave("graphs/binned ages bk.png", width = 6, height = 6)
+
+```
+
+```{r}
+#calculating round and spiky bias for each person
+bk_data_combined_bias <- bk_data_combined %>% drop_na() %>% 
+                  group_by(ID, sound) %>%
+                  mutate(bias = sum(correct)/n() - 0.5)
+
+m1 <- glm(bias ~ 0+Range:sound, data = bk_data_combined_bias)
+summary(m1)
+
+bko1_bias_table <-summary.glm(m1)$coefficients
+
+#write.csv(bko1_bias_table, "significance tables/bko1_bias_table.csv")
+
+
+#checking 
+age_sound <- bk_data_combined_bias %>% filter(sound == "round") %>% filter(Range == "5")
+# One-sample t-test
+res <- t.test(age_sound$bias, mu = 0)
+# Printing the results: significantly different from zero
+res 
+
+#even the 5 year olds are different than 0?? dang
+```
+
+how to tell if the age groups are different from each other
+
+```{r}
+m_mult <- glm(bias ~ Range*sound, data = bk_data_combined_bias)
+m_add <- glm(bias ~ Range+sound, data = bk_data_combined_bias)
+ICtab(m_mult, m_add)
+
+Anova(m_mult)
+
+contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
+bko1_difference_table <-contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
+
+#write.csv(bko1_difference_table, "significance tables/bko1_difference_table.csv")
+```
+
+
