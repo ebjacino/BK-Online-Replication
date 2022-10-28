@@ -149,7 +149,7 @@ first_file <- TRUE
 
 #Adds ID code onto each trial, binds all individual csvs into one large dataframe
 for(i in 1:length(all_files)){
-  if(grepl("b",all_files[i])){
+  if(grepl("lg",all_files[i])){
     print(all_files[i])
     if(first_file){
       LG_data_df <- read.csv(paste0("LG_DI_five_csv/",all_files[i]))
@@ -259,6 +259,50 @@ LG_poirel_plot <-ggplot() +
 
 LG_poirel_plot
 ```
+analysis- are they different from 0?
+```{r}
+#LG_poirel_all
+lgm1 <- glm(GminusL ~ 0+Age:LG_group, data = LG_poirel_all)
+summary(lgm1)
+
+#double check- but I'm pretty sure this means they're all different from zero
+
+#lg_bias_table <-summary.glm(m1)$coefficients
+#write.csv(bko1_bias_table, "significance tables/bko1_bias_table.csv")
 
 
+#checking 
+age_group <- LG_poirel_all %>% filter(LG_group == "local") %>% filter(Range == "5")
+# One-sample t-test
+res <- t.test(age_group$GminusL, mu = 0)
+# Printing the results: significantly different from zero
+res 
+
+```
+
+how to tell if the age groups are different from each other
+
+```{r}
+#by range
+lgm_mult <- glm(GminusL ~ Range*LG_group, data = LG_poirel_all)
+lgm_add <- glm(GminusL ~ Range+LG_group, data = LG_poirel_all)
+ICtab(lgm_mult, lgm_add)
+
+Anova(lgm_mult)
+
+contrast(emmeans(lgm_mult, ~ Range | LG_group) , method = "pairwise", type = "response")
+bko1_range_difference_table <-contrast(emmeans(lgm_mult, ~ Range | LG_group) , method = "pairwise", type = "response")
+
+#write.csv(bko1_difference_table, "significance tables/bko1_difference_table.csv")
+
+#by age
+lgm_mult_a <- glm(bias ~ Age*LG_group, data = LG_poirel_all)
+lgm_add_a <- glm(bias ~ Age+LG_group, data = LG_poirel_all)
+ICtab(lgm_mult_a, lgm_add_a)
+
+Anova(lgm_mult_a)
+
+contrast(emmeans(lgm_mult_a, ~ Age | LG_group) , method = "pairwise", type = "response")
+#bko1_age_difference_table <-contrast(emmeans(lgm_mult_a, ~ Age | LG_group) , method = "pairwise", type = "response")
+```
 

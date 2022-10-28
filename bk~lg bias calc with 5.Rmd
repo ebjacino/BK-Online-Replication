@@ -11,6 +11,11 @@ generating the csvs:
 library(dplyr)
 library(stringr)
 library(tidyverse)
+library(emmeans)
+library(forcats)
+library(bbmle)      # for ICtab()
+library(car)        # for Anova()
+
 
 correct_stim_list = c("sound/baba_rep.wav" = "bouba",
                       "sound/gaga_rep.wav" = "bouba",
@@ -275,6 +280,7 @@ bk_data_combined_bias <- bk_data_combined %>% drop_na() %>%
                   group_by(ID, sound) %>%
                   mutate(bias = sum(correct)/n() - 0.5)
 
+#are they different from 0?
 m1 <- glm(bias ~ 0+Range:sound, data = bk_data_combined_bias)
 summary(m1)
 
@@ -296,6 +302,7 @@ res
 how to tell if the age groups are different from each other
 
 ```{r}
+#by range
 m_mult <- glm(bias ~ Range*sound, data = bk_data_combined_bias)
 m_add <- glm(bias ~ Range+sound, data = bk_data_combined_bias)
 ICtab(m_mult, m_add)
@@ -303,9 +310,54 @@ ICtab(m_mult, m_add)
 Anova(m_mult)
 
 contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
-bko1_difference_table <-contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
+bko1_range_difference_table <-contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
 
 #write.csv(bko1_difference_table, "significance tables/bko1_difference_table.csv")
+
+#by age
+m_mult_a <- glm(bias ~ Age*sound, data = bk_data_combined_bias)
+m_add_a <- glm(bias ~ Age+sound, data = bk_data_combined_bias)
+ICtab(m_mult_a, m_add_a)
+
+Anova(m_mult_a)
+
+contrast(emmeans(m_mult_a, ~ Age | sound) , method = "pairwise", type = "response")
+bko1_age_difference_table <-contrast(emmeans(m_mult_a, ~ Range | sound) , method = "pairwise", type = "response")
 ```
+Is there a difference in strength overall b/t round and spiky
+```{r}
+
+```
+
+comparing bk choice bias to LG bias???
+use bias scores (GminusL) from LG poirel with 5 yo.R markdown
+is there a correlation between your group (local or global group) and your BK bias score?
+```{r}
+#make a new dataframe with the following columns for each ID: round/spiky bias scores, GminusL scores, LG_group assignment
+LG_score_only <- LG_poirel_all %>% select(ID, Age, Range, GminusL, LG_group) %>% 
+                                    group_by(ID) %>% filter(row_number()==1)
+
+BK_bias_only <- bk_data_combined_bias %>% group_by(ID) %>%
+                  mutate(total_bk_bias = sum(correct)/n() - 0.5) %>% select(ID, total_bk_bias)  %>%
+                filter(row_number()==1)
+
+BK_LG_scores <- full_join(LG_score_only, BK_bias_only, by="ID")
+
+#pearson's correlation 
+#make sure the midpoints on each axis is at chance
+
+
+cor.test(BK_LG_scores$GminusL, BK_LG_scores$total_bk_bias, method = "pearson")
+#p-value = 0.6083
+
+cor_plot <-  ggplot(BK_LG_scores, aes(GminusL, total_bk_bias))
+cor_plot + geom_point() +
+  theme_light()+
+  ylim(-0.50,0.50)+
+  geom_smooth(method='lm')+
+  ylab("BK bias in expected direction")+
+  xlab("<- local bias, global bias ->")
+```
+
 
 

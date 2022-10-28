@@ -73,8 +73,6 @@ LG_data_df_combined_bias <- LG_data_df_combined_bias %>% mutate(choice_number = 
 
 new calculation: sum(global)-sum(local)
 
-need to group_by(ID, choice)
-
 ```{r}
 LG_data_df_combined_bias %>% group_by(ID) %>% count(choice)
 
@@ -90,7 +88,7 @@ adding the local-global value to the LG_data_df_combined_bias
 LG_poirel_all <- full_join(LG_data_df_combined_bias, LG_count_p, by ="ID")
 ```
 
-graphing
+calculating things for graphing
 ```{r}
 #to count choice bias and see how many participants are in each age range
 LG_bias_data <- LG_data_df_combined_bias %>% group_by(ID,Range) %>% 
@@ -104,15 +102,36 @@ LG_bias_data <- LG_data_df_combined_bias %>% group_by(ID,Range) %>%
 #2 rows for each ID- local group and global group
 LG_bias_poirel <- LG_poirel_all %>% group_by(Range, LG_group) %>%
                                     summarize(mean_bias = mean(GminusL),
-                                              #is this making it too small because it's divided by group?
+                                #is this making it too small because it's divided by group?
                                     sd_bias = sd(GminusL),
                                     se_bias=sd_bias/sqrt(n())) %>% ungroup()
+#in past analysis, N was number of trials (double check, Ben says that's incorrect) 
 
 LG_poirel_points <- LG_poirel_all  %>% group_by(ID,Range, LG_group) %>%
                         mutate(bias_round = round_any(GminusL,5)) %>%  ungroup() %>%
                         group_by(Range,bias_round,LG_group) %>%
                         summarise(Count = length(unique(ID)))
 
+
+#counting number of participants
+LG_group_count <- LG_poirel_all %>% group_by(Range, LG_group) %>% summarise(
+                                                           count = length(unique(ID)))
+LG_group_count_p <- full_join(LG_group_count, LG_bias_data, by="Range")
+#proportion = number in l/g group divided by total N participants in age range #######################
+LG_group_count_p <- LG_group_count_p %>% mutate(proportion = count/N)
+
+
+#average values!! average of GminusL for each age range
+LG_weighted_avg <- LG_poirel_all %>% group_by(Range) %>%
+                                    summarise(avg_bias = mean(GminusL),
+                                              sd_bias = sd(avg_bias),
+                                              se_bias=sd_bias/sqrt(n()), 
+                                              N = n()) %>% ungroup()
+#why aren't the SDs working? 
+
+```
+
+```{r}
 #GRAPH TIME
 LG_poirel_plot <-ggplot() +
   geom_col(LG_bias_poirel, mapping = aes(x = interaction(LG_group,Range), y = mean_bias), color = "black", fill = NA) +
@@ -130,5 +149,52 @@ LG_poirel_plot <-ggplot() +
   ylab("<local bias, global bias>")
 
 LG_poirel_plot
+
+#average GminusL for each age range
+LG_poirel_plot2 <-ggplot() +
+  geom_col(LG_weighted_avg, mapping = aes(x = Range, y = avg_bias), color = "black", fill = NA) +
+  geom_col(LG_weighted_avg, mapping = aes(x = Range, y = avg_bias, fill = Range), alpha = 0.5) +
+  
+  theme_light() +
+  #facet_wrap("Range") +
+  #ylim(-0.5,0.5) +
+  ylab("Global Bias") +
+  #scale_color_manual(values = rev(cols)) +
+  #scale_fill_manual(values = rev(cols)) +
+  xlab("global and local groups in each age range") +
+  ylab("<local bias, global bias>")
+
+LG_poirel_plot2
 ```
+count plot?
+```{r}
+#LG_group_count need to calculate the proportion, not a count
+#is there an increase in local or global group assignment as a function of age?
+
+
+p <- ggplot(LG_group_count_p, aes(interaction(LG_group,Range), proportion))
+p + geom_point() +
+  theme_light()
+
+#make a plot where the bard are weighted??
+
+```
+age as a point plot? point plot, but I don't think this is very useful at all 
+```{r}
+LG_poirel_plot3 <-ggplot() +
+  geom_point(LG_poirel_all, mapping = aes(x = Age, y = GminusL), color = "black", fill = NA) +
+
+  theme_light() +
+  #facet_wrap("Range") +
+  #ylim(-0.5,0.5) +
+  ylab("Global Bias") +
+  #scale_color_manual(values = rev(cols)) +
+  #scale_fill_manual(values = rev(cols)) +
+  xlab("Age") +
+  ylab("<local bias, global bias>")
+
+LG_poirel_plot3
+```
+
+
 
