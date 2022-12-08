@@ -1,8 +1,8 @@
 Wanted to try making a new way to graph things. see LG Bias Calculation for the normal 
 scale of global bias score as a proportion value
 
-This is based off of Poire 2011, where they calculated local-global and ploted positive and negative values 
-so with 24 trials, a +24 means all local and -24 means all global 
+This is based off of Poire 2011, where they calculated global-local and plotted positive and negative values 
+so with 24 trials, a -24 means all local and +24 means all global 
 
 
 setup:
@@ -20,7 +20,7 @@ right_key = "m"
 all_files <- list.files("LG tidy csv")
 first_file <- TRUE
 
-#Adds ID code onto each trial, binds all individual csvs into one large dataframe
+#Adds ID code onto each trial, binds all individual csvs into one large dataframe with all trials for all participants
 for(i in 1:length(all_files)){
   if(grepl("b",all_files[i])){
     print(all_files[i])
@@ -102,11 +102,12 @@ LG_bias_data <- LG_data_df_combined_bias %>% group_by(ID,Range) %>%
 #2 rows for each ID- local group and global group
 LG_bias_poirel <- LG_poirel_all %>% group_by(Range, LG_group) %>%
                                     summarize(mean_bias = mean(GminusL),
-                                #is this making it too small because it's divided by group?
+                                #is this making it too small because it's divided by group? it's dividing by number of trials, not participants
                                     sd_bias = sd(GminusL),
                                     se_bias=sd_bias/sqrt(n())) %>% ungroup()
-#in past analysis, N was number of trials (double check, Ben says that's incorrect) 
+#in past analysis, N was number of trials (double check, stats ppl says that's incorrect) 
 
+#calculating the points that go on the graph
 LG_poirel_points <- LG_poirel_all  %>% group_by(ID,Range, LG_group) %>%
                         mutate(bias_round = round_any(GminusL,5)) %>%  ungroup() %>%
                         group_by(Range,bias_round,LG_group) %>%
@@ -121,13 +122,12 @@ LG_group_count_p <- full_join(LG_group_count, LG_bias_data, by="Range")
 LG_group_count_p <- LG_group_count_p %>% mutate(proportion = count/N)
 
 
-#average values!! average of GminusL for each age range
+#average values!! average of GminusL for each age range################
 LG_weighted_avg <- LG_poirel_all %>% group_by(Range) %>%
                                     summarise(avg_bias = mean(GminusL),
                                               sd_bias = sd(avg_bias),
                                               se_bias=sd_bias/sqrt(n()), 
                                               N = n()) %>% ungroup()
-#why aren't the SDs working? 
 
 ```
 
@@ -140,8 +140,6 @@ LG_poirel_plot <-ggplot() +
   geom_point(LG_bias_poirel, mapping = aes(x = interaction(LG_group,Range), y = mean_bias)) +
   geom_errorbar(LG_bias_poirel, mapping = aes(x = interaction(LG_group,Range), y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1) +
   theme_classic() +
-  #facet_wrap("Range") +
-  #ylim(-0.5,0.5) +
   ylab("Global Bias") +
   #scale_color_manual(values = rev(cols)) +
   #scale_fill_manual(values = rev(cols)) +
@@ -154,10 +152,7 @@ LG_poirel_plot
 LG_poirel_plot2 <-ggplot() +
   geom_col(LG_weighted_avg, mapping = aes(x = Range, y = avg_bias), color = "black", fill = NA) +
   geom_col(LG_weighted_avg, mapping = aes(x = Range, y = avg_bias, fill = Range), alpha = 0.5) +
-  
   theme_light() +
-  #facet_wrap("Range") +
-  #ylim(-0.5,0.5) +
   ylab("Global Bias") +
   #scale_color_manual(values = rev(cols)) +
   #scale_fill_manual(values = rev(cols)) +
@@ -176,7 +171,6 @@ p <- ggplot(LG_group_count_p, aes(interaction(LG_group,Range), proportion))
 p + geom_point() +
   theme_light()
 
-#make a plot where the bard are weighted??
 
 ```
 age as a point plot? point plot, but I don't think this is very useful at all 
@@ -185,8 +179,6 @@ LG_poirel_plot3 <-ggplot() +
   geom_point(LG_poirel_all, mapping = aes(x = Age, y = GminusL), color = "black", fill = NA) +
 
   theme_light() +
-  #facet_wrap("Range") +
-  #ylim(-0.5,0.5) +
   ylab("Global Bias") +
   #scale_color_manual(values = rev(cols)) +
   #scale_fill_manual(values = rev(cols)) +

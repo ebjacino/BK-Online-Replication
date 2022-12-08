@@ -127,14 +127,14 @@ for(file in rds_files){
   
   
   
-  file_path_bk <- paste0("LG_DI_five_csv/",file_id,"_bk.csv")
-  file_path_lg <- paste0("LG_DI_five_csv/",file_id,"_lg.csv")
+  file_path_bk <- paste0("LG nc plus bk/",file_id,"_bk.csv")
+  file_path_lg <- paste0("LG nc plus bk/",file_id,"_lg.csv")
   
   #file_path_prac <- paste0("LG practice trials/",file_id,".csv")
   #write.csv(data_prac, file_path_prac)
   
   write.csv(data_exp_bk, file_path_bk) 
-  #write.csv(data_exp_lg, file_path_lg)
+  write.csv(data_exp_lg, file_path_lg)
   
 }
 
@@ -154,7 +154,7 @@ round_any <- function(x, accuracy, f=round){f(x/ accuracy) * accuracy}
 left_key = "z"
 right_key = "m"
 
-all_files <- list.files("LG_DI_five_csv")
+all_files <- list.files("LG nc plus bk")
 first_file <- TRUE
 
 #Adds ID code onto each trial, binds all individual csvs into one large dataframe
@@ -162,17 +162,19 @@ for(i in 1:length(all_files)){
   if(grepl("bk",all_files[i])){
     print(all_files[i])
     if(first_file){
-      bk_data_df <- read.csv(paste0("LG_DI_five_csv/",all_files[i]))
+      bk_data_df <- read.csv(paste0("LG nc plus bk/",all_files[i]))
       bk_data_df <- bk_data_df %>% mutate(ID = substr(all_files[i],1,6))
       first_file <- FALSE
     }
     else{
-      bknew_data_df <- read.csv(paste0("LG_DI_five_csv/",all_files[i]))
+      bknew_data_df <- read.csv(paste0("LG nc plus bk/",all_files[i]))
       bknew_data_df <- bknew_data_df %>% mutate(ID = substr(all_files[i],1,6))
       bk_data_df <- rbind(bk_data_df,bknew_data_df)
     }
   }
 }
+
+unique(bk_data_df$ID) #at 96 Dec 6
 
 ```
 add in ages
@@ -213,7 +215,7 @@ bk_range_plot <-ggplot() +
   geom_col(bk_bias_data, mapping = aes(x = sound, y = mean_bias, fill = sound), alpha = 0.5) +
   geom_point(bk_bias_data, mapping = aes(x = sound, y = mean_bias)) +
   geom_errorbar(bk_bias_data, mapping = aes(x = sound, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1) +
-  theme_classic() +
+  theme_light() +
   facet_wrap("Range") +
   ylim(-0.5,0.5) +
   ylab("Bias") +
@@ -355,6 +357,7 @@ cor_plot + geom_point() +
   theme_light()+
   ylim(-0.50,0.50)+
   geom_smooth(method='lm')+
+  facet_wrap("Range")+
   ylab("BK bias in expected direction")+
   xlab("<- local bias, global bias ->")
 ```

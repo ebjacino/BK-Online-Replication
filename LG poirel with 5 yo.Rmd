@@ -1,12 +1,14 @@
 Including the 5 year olds as their own age range
 also trying to bin the age ranges by age, instad of age range 
-also kaing the graphs in the Poirel 2011 style (global-local scores)
+also taking the graphs in the Poirel 2011 style (global-local scores)
 
 generating the csvs:
 ```{r}
 library(dplyr)
 library(stringr)
 library(tidyverse)
+library(bbmle)      # for ICtab()
+
 
 correct_stim_list = c("sound/baba_rep.wav" = "bouba",
                       "sound/gaga_rep.wav" = "bouba",
@@ -132,7 +134,7 @@ for(file in rds_files){
 ```
 
 
-setup putting together the csvs:
+setup putting together the csvs into one dataframe:
 ```{r}
 library(dplyr)
 library(tidyverse)
@@ -164,7 +166,7 @@ for(i in 1:length(all_files)){
   }
 }
 
-unique(LG_data_df$ID) #at 94 oct 25
+unique(LG_data_df$ID) #at 96 Dec 6
 ```
 
 ```{r}
@@ -219,38 +221,69 @@ LG_poirel_all <- full_join(LG_data_df_combined_bias, LG_count_p, by ="ID")
 ```
 
 graphing, trying to bin each age, instead of range
+change Range to Age
 ```{r}
 #to count choice bias and see how many participants are in each age range
-LG_bias_data <- LG_data_df_combined_bias %>% group_by(ID,Age) %>% 
+LG_bias_data <- LG_data_df_combined_bias %>% group_by(ID,Range) %>% 
                                     summarise(global_bias = sum(choice_number)/n()) %>% 
-                                    group_by(Age) %>%
+                                    group_by(Range) %>%
                                     summarize(mean_bias = mean(global_bias),
                                     sd_bias = sd(global_bias),
                                     se_bias=sd_bias/sqrt(n()),
                                     N=n()) %>% ungroup()
 
 #2 rows for each ID- local group and global group
-LG_bias_poirel <- LG_poirel_all %>% group_by(Age, LG_group) %>%
+#instead of LG_poirel_all, try summarizing from an already summarized across participant df
+LG_bias_poirel <- LG_poirel_all %>% group_by(Range, LG_group) %>%
                                     summarize(mean_bias = mean(GminusL),
-                                              #is this making it too small because it's divided by group?
+                                              #is this making it too small because it's divided by group? yes
                                     sd_bias = sd(GminusL),
                                     n = n(),
                                     se_bias=sd_bias/sqrt(n())) %>% ungroup()
 
-LG_poirel_points <- LG_poirel_all  %>% group_by(ID,Age, LG_group) %>%
+## make a dataset with one row per person
+LG_bias_poirel_one_row <- LG_poirel_all %>% group_by(ID,Range, LG_group) %>%
+                                      summarise(GminusL = mean(GminusL)) 
+                                    
+
+LG_poirel_points <- LG_poirel_all  %>% group_by(ID,Range, LG_group) %>%
                         mutate(bias_round = round_any(GminusL,5)) %>%  ungroup() %>%
-                        group_by(Age,bias_round,LG_group) %>%
+                        group_by(Range,bias_round,LG_group) %>%
                         summarise(Count = length(unique(ID)))
 
+#counting number of participants
+LG_group_count <- LG_poirel_all %>% group_by(Range, LG_group) %>% summarise(
+                                                           count = length(unique(ID)))
+LG_group_count_p <- full_join(LG_group_count, LG_bias_data, by="Range")
+#proportion = number in l/g group divided by total N participants in age range #######################
+LG_group_count_p <- LG_group_count_p %>% mutate(proportion = count/N)
 
+
+#average values!! average of GminusL for each age range################
+LG_weighted_avg <- LG_poirel_all %>% group_by(ID,Range) %>%
+                                      summarise(GminusL = mean(GminusL)) %>%
+                                    ungroup() %>%
+                                    group_by(Range) %>%
+                                    summarise(avg_bias = mean(GminusL),
+                                              sd_bias = sd(GminusL, na.rm = TRUE),
+                                              se_bias=sd_bias/sqrt(n()), 
+                                              N = n()) %>% ungroup()
+
+#make one data set with one row for each participant
+LG_average_gminusl <- LG_poirel_all %>% group_by(ID,Range) %>%
+                                      summarise(GminusL = mean(GminusL))
+
+```
+
+```{r}
 
 #GRAPH TIME
 LG_poirel_plot <-ggplot() +
-  geom_col(LG_bias_poirel, mapping = aes(x = interaction(LG_group,Age), y = mean_bias), color = "black", fill = NA) +
-  geom_point(LG_poirel_points, mapping = aes(x = interaction(LG_group,Age), y = bias_round, size = Count, color = Age)) +
-  geom_col(LG_bias_poirel, mapping = aes(x = interaction(LG_group,Age), y = mean_bias, fill = Age), alpha = 0.5) +
-  geom_point(LG_bias_poirel, mapping = aes(x = interaction(LG_group,Age), y = mean_bias)) +
-  geom_errorbar(LG_bias_poirel, mapping = aes(x = interaction(LG_group,Age), y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1) +
+  geom_col(LG_bias_poirel, mapping = aes(x = interaction(LG_group,Range), y = mean_bias), color = "black", fill = NA) +
+  geom_point(LG_poirel_points, mapping = aes(x = interaction(LG_group,Range), y = bias_round, size = Count, color = Range)) +
+  geom_col(LG_bias_poirel, mapping = aes(x = interaction(LG_group,Range), y = mean_bias, fill = Range), alpha = 0.5) +
+  geom_point(LG_bias_poirel, mapping = aes(x = interaction(LG_group,Range), y = mean_bias)) +
+  geom_errorbar(LG_bias_poirel, mapping = aes(x = interaction(LG_group,Range), y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = .75) +
   theme_classic() +
   #facet_wrap("Range") +
   ylab("Global Bias") +
@@ -259,20 +292,39 @@ LG_poirel_plot <-ggplot() +
 
 LG_poirel_plot
 ```
-analysis- are they different from 0?
+
 ```{r}
-#LG_poirel_all
-lgm1 <- glm(GminusL ~ 0+Age:LG_group, data = LG_poirel_all)
+
+####average GminusL for each age range
+LG_poirel_plot2 <-ggplot() +
+  geom_col(LG_weighted_avg, mapping = aes(x = Range, y = avg_bias), color = "black", fill = NA) +
+  geom_col(LG_weighted_avg, mapping = aes(x = Range, y = avg_bias, fill = Range), alpha = 0.5) +
+  geom_errorbar(LG_weighted_avg, mapping = aes(x = Range, y = avg_bias, ymin = avg_bias-se_bias,
+                                              ymax = avg_bias+se_bias), alpha = 1, width = .75) +
+  geom_jitter(BK_LG_scores, mapping = aes(x = Range, y = GminusL)) +
+  theme_light() +
+  ylab("Global Bias") +
+  #scale_color_manual(values = rev(cols)) +
+  #scale_fill_manual(values = rev(cols)) +
+  xlab("global and local groups in each age range") +
+  ylab("<local bias, global bias>")
+
+LG_poirel_plot2
+```
+analysis- are they different from 0? LG_poirel_plot
+```{r}
+#LG_bias_poirel_one_row
+lgm1 <- glm(GminusL ~ 0+Range:LG_group, data = LG_bias_poirel_one_row)
 summary(lgm1)
 
-#double check- but I'm pretty sure this means they're all different from zero
+# they're all different from zero
 
 #lg_bias_table <-summary.glm(m1)$coefficients
 #write.csv(bko1_bias_table, "significance tables/bko1_bias_table.csv")
 
 
 #checking 
-age_group <- LG_poirel_all %>% filter(LG_group == "local") %>% filter(Range == "5")
+age_group <- LG_bias_poirel_one_row %>% filter(LG_group == "local") %>% filter(Range == "5")
 # One-sample t-test
 res <- t.test(age_group$GminusL, mu = 0)
 # Printing the results: significantly different from zero
@@ -283,15 +335,52 @@ res
 how to tell if the age groups are different from each other
 
 ```{r}
+library(car)        # for Anova()
+library(ggpubr)
+library(emmeans)
+
+
 #by range
-lgm_mult <- glm(GminusL ~ Range*LG_group, data = LG_poirel_all)
-lgm_add <- glm(GminusL ~ Range+LG_group, data = LG_poirel_all)
+lgm_mult <- glm(GminusL ~ Range*LG_group, data = LG_bias_poirel_one_row)
+lgm_add <- glm(GminusL ~ Range+LG_group, data = LG_bias_poirel_one_row)
 ICtab(lgm_mult, lgm_add)
 
 Anova(lgm_mult)
 
 contrast(emmeans(lgm_mult, ~ Range | LG_group) , method = "pairwise", type = "response")
 bko1_range_difference_table <-contrast(emmeans(lgm_mult, ~ Range | LG_group) , method = "pairwise", type = "response")
+
+#write.csv(bko1_difference_table, "significance tables/bko1_difference_table.csv")
+
+#by age
+lgm_mult_a <- glm(bias ~ Age*LG_group, data = LG_bias_poirel_one_row)
+lgm_add_a <- glm(bias ~ Age+LG_group, data = LG_bias_poirel_one_row)
+ICtab(lgm_mult_a, lgm_add_a)
+
+Anova(lgm_mult_a)
+
+contrast(emmeans(lgm_mult_a, ~ Age | LG_group) , method = "pairwise", type = "response")
+#bko1_age_difference_table <-contrast(emmeans(lgm_mult_a, ~ Age | LG_group) , method = "pairwise", type = "response")
+```
+
+weighted ave plot: how to tell if the age groups are different from each other
+
+```{r}
+library(car)        # for Anova()
+library(ggpubr)
+library(emmeans)
+
+
+#by range
+lgm_mult_b <- aov(GminusL ~ Range, data = LG_average_gminusl)
+
+#### are the weighted averages different from each other? LG_average_gminusl dataset 
+Anova(lgm_mult_b)
+summary(lgm_mult_b)
+TukeyHSD(lgm_mult_b)
+
+contrast(emmeans(lgm_mult_b, ~ Range | LG_group) , method = "pairwise", type = "response")
+bko1_range_difference_table <-contrast(emmeans(lgm_mult_b, ~ Range | LG_group) , method = "pairwise", type = "response")
 
 #write.csv(bko1_difference_table, "significance tables/bko1_difference_table.csv")
 
