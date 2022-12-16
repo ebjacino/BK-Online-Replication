@@ -361,6 +361,31 @@ cor_plot + geom_point() +
   ylab("BK bias in expected direction")+
   xlab("<- local bias, global bias ->")
 ```
+Is there any relation between being a local person and your bk bias? 
+
+```{r}
+#group BK_LG_scores by LG_group
+LG_group_cor_bk <- BK_LG_scores %>% mutate(LG_group_num = ifelse(LG_group == "local", 0,1))
+
+#is there a sig difference between bk_bias in local vs global group 
+
+#does LG_group have an effect on the model of bk_bias?
+lgm_lg_bk <- aov(total_bk_bias ~ LG_group_num, data = LG_group_cor_bk)
+
+Anova(lgm_lg_bk)
+summary(lgm_lg_bk)
+
+#to see if there is an interaction with range?
+lgm_lg_bk_a <- aov(total_bk_bias ~ LG_group_num+Range, data = LG_group_cor_bk)
+lgm_lg_bk_m <- aov(total_bk_bias ~ LG_group_num*Range, data = LG_group_cor_bk)
+ICtab(lgm_lg_bk_a, lgm_lg_bk_m)
+
+Anova(lgm_lg_bk_a)
+
+contrast(emmeans(lgm_lg_bk_a, ~ Range | LG_group_num) , method = "pairwise", type = "response")
+
+
+```
 
 
 

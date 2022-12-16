@@ -232,20 +232,24 @@ LG_bias_data <- LG_data_df_combined_bias %>% group_by(ID,Range) %>%
                                     se_bias=sd_bias/sqrt(n()),
                                     N=n()) %>% ungroup()
 
-#2 rows for each ID- local group and global group
+#2 rows for each Range, one local and one global
 #instead of LG_poirel_all, try summarizing from an already summarized across participant df
-LG_bias_poirel <- LG_poirel_all %>% group_by(Range, LG_group) %>%
+LG_bias_poirel <- LG_poirel_all %>% group_by(ID,Range, LG_group) %>%
+                                      summarise(GminusL = mean(GminusL)) %>%
+                                    ungroup() %>%
+                                    group_by(Range, LG_group) %>%
                                     summarize(mean_bias = mean(GminusL),
-                                              #is this making it too small because it's divided by group? yes
                                     sd_bias = sd(GminusL),
                                     n = n(),
                                     se_bias=sd_bias/sqrt(n())) %>% ungroup()
 
-## make a dataset with one row per person
 LG_bias_poirel_one_row <- LG_poirel_all %>% group_by(ID,Range, LG_group) %>%
-                                      summarise(GminusL = mean(GminusL)) 
-                                    
+                                      summarise(GminusL = mean(GminusL))
 
+
+
+
+#calculating the points that go on the graph
 LG_poirel_points <- LG_poirel_all  %>% group_by(ID,Range, LG_group) %>%
                         mutate(bias_round = round_any(GminusL,5)) %>%  ungroup() %>%
                         group_by(Range,bias_round,LG_group) %>%
@@ -301,7 +305,7 @@ LG_poirel_plot2 <-ggplot() +
   geom_col(LG_weighted_avg, mapping = aes(x = Range, y = avg_bias, fill = Range), alpha = 0.5) +
   geom_errorbar(LG_weighted_avg, mapping = aes(x = Range, y = avg_bias, ymin = avg_bias-se_bias,
                                               ymax = avg_bias+se_bias), alpha = 1, width = .75) +
-  geom_jitter(BK_LG_scores, mapping = aes(x = Range, y = GminusL)) +
+  geom_jitter(LG_bias_poirel_one_row, mapping = aes(x = Range, y = GminusL)) +
   theme_light() +
   ylab("Global Bias") +
   #scale_color_manual(values = rev(cols)) +
@@ -384,14 +388,122 @@ bko1_range_difference_table <-contrast(emmeans(lgm_mult_b, ~ Range | LG_group) ,
 
 #write.csv(bko1_difference_table, "significance tables/bko1_difference_table.csv")
 
-#by age
-lgm_mult_a <- glm(bias ~ Age*LG_group, data = LG_poirel_all)
-lgm_add_a <- glm(bias ~ Age+LG_group, data = LG_poirel_all)
-ICtab(lgm_mult_a, lgm_add_a)
+```
 
-Anova(lgm_mult_a)
+***************************************************************************
+Testing only the first half of trials for LG
+slice only the top 12 rows for each participant
+```{r}
+#LG_data_df_combined_bias has all trials for each participant
 
-contrast(emmeans(lgm_mult_a, ~ Age | LG_group) , method = "pairwise", type = "response")
-#bko1_age_difference_table <-contrast(emmeans(lgm_mult_a, ~ Age | LG_group) , method = "pairwise", type = "response")
+
+LG_count <-LG_data_df_combined_bias %>% group_by(ID) %>% count(choice)
+LG_count_p <- LG_count %>% pivot_wider(names_from = choice, values_from = n) %>% mutate_all(~replace(., is.na(.), 0))
+#new column with local-global
+LG_count_p <- LG_count_p %>% mutate(GminusL = global-local) %>% mutate(LG_group = ifelse(GminusL >0, "global", "local"))
+
+#change number in the slice() to change number of trials
+LG_half_trials <- LG_data_df_combined_bias %>% group_by(ID) %>%
+  dplyr::slice(1:6)
+LG_half_trials_bias <- LG_half_trials %>% group_by(ID, Range) %>% count(choice)  %>% 
+                        pivot_wider(names_from = choice, values_from = n) %>% 
+                        mutate_all(~replace(., is.na(.), 0)) %>% mutate(GminusL = global-local) %>% mutate(LG_group = ifelse(GminusL >0, "global", "local"))
+
+
+#now make a df with one row per participant
+LG_half_trials_one_row <- LG_half_trials_bias %>% group_by(ID,Range,LG_group) %>%
+  summarise(GminusL = mean(GminusL))
+
+#summarizing with the SE and SD
+LG_half_trials_graph <- LG_half_trials_bias %>% group_by(Range, LG_group) %>%
+  summarize(mean_bias = mean(GminusL),
+            sd_bias = sd(GminusL),
+            n = n(),
+            se_bias=sd_bias/sqrt(n())) %>% ungroup()
+
+#calculating the points that go on the graph
+LG_half_trials_points <- LG_half_trials_one_row  %>% group_by(ID,Range, LG_group) %>%
+  mutate(bias_round = round_any(GminusL,5)) %>%  ungroup() %>%
+  group_by(Range,bias_round,LG_group) %>%
+  summarise(Count = length(unique(ID)))
+
+
+```
+calculating the average for each age range, instead of splitting it into 2 for LG_group
+```{r}
+#summarizing with the SE and SD
+LG_half_trials_graph_avg <- LG_half_trials_bias %>% group_by(Range) %>%
+  summarize(mean_bias = mean(GminusL),
+            sd_bias = sd(GminusL),
+            n = n(),
+            se_bias=sd_bias/sqrt(n())) %>% ungroup()
+
+#calculating the points that go on the graph
+LG_half_trials_points_av <- LG_half_trials_one_row  %>% group_by(ID,Range) %>%
+  mutate(bias_round = round_any(GminusL,5)) %>%  ungroup() %>%
+  group_by(Range,bias_round,LG_group) %>%
+  summarise(Count = length(unique(ID)))
+```
+
+
+```{r}
+#### GminusL for each age range
+LG_poirel_plot_half <-ggplot() +
+  geom_col(LG_half_trials_graph, mapping = aes(x = interaction(LG_group,Range), y = mean_bias), color = "black", fill = NA) +
+  geom_col(LG_half_trials_graph, mapping = aes(x = interaction(LG_group,Range), y = mean_bias, fill = Range), alpha = 0.5) +
+  geom_errorbar(LG_half_trials_graph, mapping = aes(x = interaction(LG_group,Range), y = mean_bias, ymin = mean_bias-se_bias,ymax = mean_bias+se_bias), alpha = 1, width = .75) +
+  geom_point(LG_half_trials_points, mapping = aes(x = interaction(LG_group,Range), y = bias_round, size = Count, color = Range)) +
+  theme_light() +
+  #scale_color_manual(values = rev(cols)) +
+  #scale_fill_manual(values = rev(cols)) +
+  xlab("global and local groups in each age range") +
+  ylab("<local bias, global bias>")
+
+LG_poirel_plot_half
+```
+
+```{r}
+#### GminusL for each age range AVERAGED
+LG_poirel_plot_half_av <-ggplot() +
+  geom_col(LG_half_trials_graph_avg, mapping = aes(x = Range, y = mean_bias), color = "black", fill = NA) +
+  geom_col(LG_half_trials_graph_avg, mapping = aes(x = Range, y = mean_bias, fill = Range), alpha = 0.5) +
+  geom_errorbar(LG_half_trials_graph_avg, mapping = aes(x = Range, y = mean_bias, ymin = mean_bias-se_bias,ymax = mean_bias+se_bias), alpha = 1, width = .75) +
+  geom_point(LG_half_trials_points_av, mapping = aes(x = Range, y = bias_round, size = Count, color = Range)) +
+  theme_light() +
+  #scale_color_manual(values = rev(cols)) +
+  #scale_fill_manual(values = rev(cols)) +
+  xlab("global and local groups in each age range") +
+  ylab("<local bias, global bias>")
+
+LG_poirel_plot_half_av
+```
+analysis how to tell if the age groups are different from each other
+
+```{r}
+#by range
+lgm_mult <- glm(GminusL ~ Range*LG_group, data = LG_half_trials_one_row)
+lgm_add <- glm(GminusL ~ Range+LG_group, data = LG_half_trials_one_row)
+ICtab(lgm_mult, lgm_add)
+
+Anova(lgm_add)
+
+contrast(emmeans(lgm_mult, ~ Range | LG_group) , method = "pairwise", type = "response")
+bko1_range_difference_table <-contrast(emmeans(lgm_mult, ~ Range | LG_group) , method = "pairwise", type = "response")
+```
+analysis how to tell if the averages are different form each other
+
+```{r}
+#by range
+lgm_mult_b <- aov(GminusL ~ Range, data = LG_half_trials_one_row)
+
+Anova(lgm_mult_b)
+summary(lgm_mult_b)
+TukeyHSD(lgm_mult_b)
+
+#checking 
+five_to_adult <- LG_half_trials_one_row %>%  filter(Range == "5" | Range == "Adult")
+# One-sample t-test
+res <- t.test(GminusL ~ Range, data = five_to_adult)
+res
 ```
 

@@ -1,0 +1,170 @@
+---
+title: "Ben Working on 3 Slice Graph"
+output: html_notebook
+---
+
+setup putting together the csvs into one dataframe:
+```{r}
+library(dplyr)
+library(tidyverse)
+library(readxl)
+library("writexl")
+library(ggplot2)
+library(ggpubr)
+library(forcats)
+```
+
+```{r}
+round_any <- function(x, accuracy, f=round){f(x/ accuracy) * accuracy}
+left_key = "z"
+right_key = "m"
+
+all_files <- list.files("LG_DI_five_csv")
+first_file <- TRUE
+
+#Adds ID code onto each trial, binds all individual csvs into one large dataframe
+for(i in 1:length(all_files)){
+  if(grepl("lg",all_files[i])){
+    print(all_files[i])
+    if(first_file){
+      LG_data_df <- read.csv(paste0("LG_DI_five_csv/",all_files[i]))
+      LG_data_df <- LG_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      first_file <- FALSE
+    }
+    else{
+      LGnew_data_df <- read.csv(paste0("LG_DI_five_csv/",all_files[i]))
+      LGnew_data_df <- LGnew_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      LG_data_df <- rbind(LG_data_df,LGnew_data_df)
+    }
+  }
+}
+
+unique(LG_data_df$ID) #at 96 Dec 6
+```
+
+```{r}
+#load in the tables of targets and pairs descriptions
+target_table <- read_excel("LG_target_table.xlsx")
+pairs_table <- read_excel("LG_pair_table.xlsx")
+age_table <- read_excel("LG_ages_5.xlsx")
+age_table <- age_table %>% mutate(ID = tolower(ID)) #%>% select(ID,Age,Range)
+
+#full_join to combine
+LG_data_df_combined <- full_join(LG_data_df,target_table, by="image_ID_targets")
+#LG_data_df has no confound image IDs so they are populating as NAs
+LG_data_df_combined <- full_join(LG_data_df_combined,pairs_table, by="image_ID_pairs")%>%
+  filter(!is.na(ID))
+LG_data_df_combined <- full_join(LG_data_df_combined,age_table, by="ID")
+#if the the global choice is on the left and they make the "z" response, then put G in the choice column, etc
+LG_data_df_combined_bias <- LG_data_df_combined %>% mutate(choice = ifelse(response_pairs == left_key &
+                                                                             target_global == pair_left_global,
+                                                                           "global", 
+                                                                           ifelse(response_pairs == left_key &
+                                                                                    target_local == pair_left_local,
+                                                                                  "local",
+                                                                         ifelse(response_pairs == right_key &
+                                                                                  target_global == pair_right_global,
+                                                                                "global",
+                                                                          ifelse(response_pairs == right_key &
+                                                                                    target_local == pair_right_local,
+                                                                                  "local",
+                                                                                 NA)))))
+LG_data_df_combined_bias <- LG_data_df_combined_bias %>% filter(!is.na(choice))
+LG_data_df_combined_bias <- LG_data_df_combined_bias %>% mutate(choice_number = ifelse(choice == "global", 1, 0)) %>%
+                            filter(!is.na(choice))
+```
+
+new calculation: sum(global)-sum(local)
+
+need to group_by(ID, choice)
+
+```{r}
+LG_data_df_combined_bias %>% group_by(ID) %>% count(choice)
+
+LG_count_first6 <- LG_data_df_combined_bias %>% group_by(ID) %>% slice_head(n=6) %>% count(choice) %>% mutate(Type = "First 6")
+LG_count_first12 <- LG_data_df_combined_bias %>% group_by(ID) %>% slice_head(n=12) %>% count(choice) %>% mutate(Type = "First 12")
+LG_count_All <- LG_data_df_combined_bias %>% group_by(ID) %>% count(choice) %>% mutate(Type = "All")
+LG_count_last12 <- LG_data_df_combined_bias %>% group_by(ID) %>% slice_tail(n=12) %>% count(choice) %>% mutate(Type = "Last 12")
+LG_count_last6 <- LG_data_df_combined_bias %>% group_by(ID) %>% slice_tail(n=6) %>% count(choice) %>% mutate(Type = "Last 6")
+
+LG_count <- LG_count_first6 %>% rbind(.,LG_count_first12) %>% 
+                                rbind(.,LG_count_All) %>% 
+                                rbind(.,LG_count_last12) %>% 
+                                rbind(.,LG_count_last6)
+
+LG_count_pivot <- LG_count %>% pivot_wider(names_from = choice, values_from = n) %>% mutate_all(~replace(., is.na(.), 0))
+#new column with local-global
+LG_count_per <- LG_count_pivot %>% group_by(ID, Type) %>% mutate(global_percent = global / (global+local))
+
+
+age_table <- read_excel("LG_ages_5.xlsx")
+age_table <- age_table %>% mutate(ID = tolower(ID))
+
+LG_count_per_ages <- full_join(LG_count_per,age_table) %>%
+                         mutate(Type = factor(Type),
+                                Type = fct_relevel(Type,c("First 6","First 12","All","Last 12","Last 6")))
+
+LG_count_per_ages_sum <- LG_count_per_ages %>% 
+                         group_by(Type,Range) %>% 
+                         summarize(mean_global_p = mean(global_percent),
+                                   sd_global_p = sd(global_percent),
+                                   se_global_p = sd_global_p/sqrt(n())) %>%
+                         ungroup()
+
+
+LG_count_per_ages_subtract <- LG_count_per_ages %>% select(-c(global, local)) %>% 
+                                                    mutate(Type = gsub(" ","_",Type)) %>%
+                                                    pivot_wider(names_from = Type, values_from = global_percent) %>%
+                                                    mutate(LmF6 = Last_6 - First_6,
+                                                           LmF12 = Last_12 - First_12)
+```
+
+graphing first 6, first 12, all, last 12, last 6 for each age range
+```{r}
+ggplot(LG_count_per_ages_sum, aes(x = Range, y = mean_global_p, fill = Type)) +
+  geom_col(position = "dodge", alpha = 0.1)+
+  geom_point(LG_count_per_ages, mapping = aes(y = global_percent, color = Type), 
+             position=position_dodge(width=1), alpha = 0.25)+
+  geom_errorbar(aes(y = mean_global_p, 
+                    ymin = mean_global_p-se_global_p, 
+                    ymax = mean_global_p+se_global_p),
+                position = "dodge")+
+  theme_light()+
+  ylab("Percent Global Responses")+
+  xlab("Age Range")
+```
+
+seeing if any are different from each other (no sig differences)
+```{r}
+
+LG_count_ages_model <- aov(global_percent ~ Type:Range, data = LG_count_per_ages)
+Anova(LG_count_ages_model)
+
+TukeyHSD(LG_count_ages_model)
+
+```
+checking distribution. Is there a significant amount of people becoming more global over time? 
+```{r}
+#last 6 minus first 6
+ggplot(LG_count_per_ages_subtract, aes(x = LmF6))+
+  geom_histogram()+
+  facet_wrap(~ Range)+
+  theme_classic()
+
+#last 12 minus the first 12
+ggplot(LG_count_per_ages_subtract, aes(x = LmF12))+
+  geom_histogram()+
+  facet_wrap(~ Range)+
+  theme_classic()
+```
+
+```{r}
+sub_diff_from_zero_6 <- glm(LmF6 ~ Range + 0, data = LG_count_per_ages_subtract)
+summary(sub_diff_from_zero_6)
+
+sub_diff_from_zero_12 <- glm(LmF12 ~ Range + 0, data = LG_count_per_ages_subtract)
+summary(sub_diff_from_zero_12)
+#9 to 11 and adults gain a significantly more global preference in the second half than the first half 
+```
+
+

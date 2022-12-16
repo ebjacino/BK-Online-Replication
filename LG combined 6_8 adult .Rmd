@@ -1,0 +1,152 @@
+comparing 6/8 year olds to compare to adults- merging datasets from original bko1 and the confound bko1. We found that the confound (number matching) had no effect on global bias scores or on perception of other trials, so merge the 2 data sets and delete the confounded trials. 
+
+generating the csvs:
+```{r}
+library(dplyr)
+library(stringr)
+library(tidyverse)
+library(bbmle)      # for ICtab()
+
+
+correct_stim_list = c("sound/baba_rep.wav" = "bouba",
+                      "sound/gaga_rep.wav" = "bouba",
+                      "sound/keekee.wav" = "kiki",
+                      "sound/teetee.wav" = "kiki")
+
+left_key = "z"
+right_key = "m"
+
+which_is_correct <- function(stimuli,lefts,rights) {
+  
+  #Make a new vector the same length as the number of rows
+  correct_vec <- rep(NA,length(stimuli))
+  
+  #For each row in the dataset....
+  for(i in seq(1:length(stimuli))){
+    
+    #Get the correct type ("Bouba" or "Kiki") by checking in the stim list
+    correct_type <- correct_stim_list[stimuli[i]]
+    
+    #If the correct type is in the left one the correct key was the left key
+    if(grepl(correct_type, lefts[i], fixed = TRUE)){
+      correct_key <- left_key
+    }
+    #If the correct type is in the right one the correct key was the right key
+    else if(grepl(correct_type, rights[i], fixed = TRUE)){
+      correct_key <- right_key
+    }
+    #If it isn't in either something has gone wrong so you'll get an NA
+    else{
+      correct_key <- NA
+    }
+    
+    #Put that correct key in the output vector
+    correct_vec[i] <- correct_key
+  }
+  
+  #Return the final filled in vector
+  return(correct_vec)
+}
+
+
+
+setup putting together the csvs into one dataframe:
+```{r}
+library(dplyr)
+library(tidyverse)
+library(readxl)
+library("writexl")
+library(ggplot2)
+library(ggpubr)
+round_any <- function(x, accuracy, f=round){f(x/ accuracy) * accuracy}
+left_key = "z"
+right_key = "m"
+
+all_files <- list.files("merged nc and c csvs")
+first_file <- TRUE
+
+#Adds ID code onto each trial, binds all individual csvs into one large dataframe
+for(i in 1:length(all_files)){
+  if(grepl("lg",all_files[i])){
+    print(all_files[i])
+    if(first_file){
+      LG_data_df <- read.csv(paste0("merged nc and c csvs/",all_files[i]))
+      LG_data_df <- LG_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      first_file <- FALSE
+    }
+    else{
+      LGnew_data_df <- read.csv(paste0("merged nc and c csvs/",all_files[i]))
+      LGnew_data_df <- LGnew_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      LG_data_df <- rbind(LG_data_df,LGnew_data_df)
+    }
+  }
+}
+
+unique(LG_data_df$ID) #at 97 Dec 15
+```
+
+```{r}
+#load in the tables of targets and pairs descriptions
+target_table <- read_excel("LG_target_table.xlsx")
+pairs_table <- read_excel("LG_pair_table.xlsx")
+age_table <- read_excel("combined 6_8 and adult ages.xlsx")
+age_table <- age_table %>% mutate(ID = tolower(ID)) #%>% select(ID,Age,Range)
+
+#full_join to combine
+LG_data_df_combined <- full_join(LG_data_df,target_table, by="image_ID_targets")
+#LG_data_df has no confound image IDs so they are populating as NAs
+LG_data_df_combined <- full_join(LG_data_df_combined,pairs_table, by="image_ID_pairs")%>%
+  filter(!is.na(ID))
+LG_data_df_combined <- full_join(LG_data_df_combined,age_table, by="ID")
+#if the the global choice is on the left and they make the "z" response, then put G in the choice column, etc
+LG_data_df_combined_bias <- LG_data_df_combined %>% mutate(choice = ifelse(response_pairs == left_key &
+                                                                             target_global == pair_left_global,
+                                                                           "global", 
+                                                                           ifelse(response_pairs == left_key &
+                                                                                    target_local == pair_left_local,
+                                                                                  "local",
+                                                                         ifelse(response_pairs == right_key &
+                                                                                  target_global == pair_right_global,
+                                                                                "global",
+                                                                          ifelse(response_pairs == right_key &
+                                                                                    target_local == pair_right_local,
+                                                                                  "local",
+                                                                                 NA)))))
+LG_data_df_combined_bias <- LG_data_df_combined_bias %>% filter(!is.na(choice))
+LG_data_df_combined_bias <- LG_data_df_combined_bias %>% mutate(choice_number = ifelse(choice == "global", 1, 0)) %>%
+                            filter(!is.na(choice))
+```
+calculation: sum(global)-sum(local)
+
+need to group_by(ID, choice)
+
+```{r}
+LG_data_df_combined_bias %>% group_by(ID) %>% count(choice)
+
+LG_count <-LG_data_df_combined_bias %>% group_by(ID) %>% count(choice)
+LG_count_p <- LG_count %>% pivot_wider(names_from = choice, values_from = n) %>% mutate_all(~replace(., is.na(.), 0))
+#new column with local-global
+LG_count_p <- LG_count_p %>% mutate(GminusL = global-local) %>% mutate(LG_group = ifelse(GminusL >0, "global", "local"))
+
+```
+adding the local-global value to the LG_data_df_combined_bias
+
+```{r}
+LG_poirel_all <- full_join(LG_data_df_combined_bias, LG_count_p, by ="ID")
+```
+graphing, binning by Range
+```{r}
+#to count choice bias and see how many participants are in each age range
+LG_bias_data <- LG_data_df_combined_bias %>% group_by(ID,Range) %>% 
+                                    summarise(global_bias = sum(choice_number)/n()) %>% 
+                                    group_by(Range) %>%
+                                    summarize(mean_bias = mean(global_bias),
+                                    sd_bias = sd(global_bias),
+                                    se_bias=sd_bias/sqrt(n()),
+                                    N=n()) %>% ungroup()
+```
+
+
+
+
+
