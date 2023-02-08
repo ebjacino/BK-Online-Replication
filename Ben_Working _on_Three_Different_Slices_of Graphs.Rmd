@@ -122,7 +122,7 @@ LG_count_per_ages_subtract <- LG_count_per_ages %>% select(-c(global, local)) %>
 graphing first 6, first 12, all, last 12, last 6 for each age range
 ```{r}
 ggplot(LG_count_per_ages_sum, aes(x = Range, y = mean_global_p, fill = Type)) +
-  geom_col(position = "dodge", alpha = 0.1)+
+  geom_col(position = "dodge", alpha = 0.4)+
   geom_point(LG_count_per_ages, mapping = aes(y = global_percent, color = Type), 
              position=position_dodge(width=1), alpha = 0.25)+
   geom_errorbar(aes(y = mean_global_p, 

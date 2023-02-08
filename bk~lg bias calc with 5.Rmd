@@ -184,6 +184,61 @@ age_table <- age_table %>% mutate(ID = tolower(ID)) #%>% select(ID,Age,Range)
 bk_data_combined <- full_join(bk_data_df,age_table, by="ID")
 ```
 
+testing first and second half bias (also excluding 5 year olds)
+```{r}
+bk_exclude_five <- bk_data_combined %>% filter(!Range == "5")
+bk_first_half <- bk_exclude_five %>% group_by(ID) %>% slice_head(n=16) %>% mutate(Type = "First half")
+bk_second_half <- bk_exclude_five %>% group_by(ID) %>% slice_tail(n=16) %>% mutate(Type = "Second half")
+
+bk_count <- bk_first_half %>% rbind(.,bk_second_half) 
+bk_count_per <- bk_count %>% group_by(ID, Type, sound) %>% summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      mutate(bias = ifelse(sound == "spiky",-1*bias,bias))
+
+no_five_age_table <- age_table%>% filter(!Range == "5")
+#add in ages
+bk_count_per_ages <- full_join(bk_count_per,no_five_age_table) %>%
+                         mutate(Type = factor(Type),
+                                Type = fct_relevel(Type,c("First half","Second half")))
+#calculate se and sd
+bk_count_per_ages_sum <- bk_count_per_ages %>% group_by(Range, Type, sound) %>% 
+                                      summarise(mean_bias = mean(bias),
+                                                sd_bias = sd(bias),
+                                                se_bias=sd_bias/sqrt(n()),
+                                                N=n()) 
+
+
+ggplot(bk_count_per_ages_sum, aes(x = sound, y = mean_bias, fill = Type)) +
+  geom_col(position = "dodge", alpha = 0.4)+
+  geom_point(bk_count_per_ages, mapping = aes(y = bias, color = Type), 
+             position=position_dodge(width=1), alpha = 0.25)+
+  geom_errorbar(aes(y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias),position = "dodge")+
+  theme_light()+
+  facet_wrap("Range")+
+  ylab("bk bias")+
+  xlab("Age Range")
+```
+
+                            
+any differences between them?
+```{r}
+#by range
+bk_count_ages_model <- aov(bias ~ Type*Range*sound, data = bk_count_per_ages)
+Anova(bk_count_ages_model)
+
+TukeyHSD(bk_count_ages_model)
+
+
+m_mult <- glm(bias ~ Range*sound, data = bk_count_per_ages)
+m_add <- glm(bias ~ Range+sound, data = bk_count_per_ages)
+ICtab(m_mult, m_add)
+
+Anova(m_mult)
+
+contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
+
+
+ ```
+
 calculate bias BK
 ```{r}
 #to count choice bias and see how many participants are in each age range
@@ -207,6 +262,42 @@ bk_bias_data_points <- bk_data_combined %>% group_by(ID,Range,sound) %>%
 
 
 ```
+
+
+#with no distiction between first half and second half
+```{r}
+bk_exclude_five <- bk_data_combined %>% filter(!Range == "5")
+
+bk_count_per <- bk_exclude_five %>% group_by(ID, sound) %>% summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      mutate(bias = ifelse(sound == "spiky",-1*bias,bias))
+
+no_five_age_table <- age_table%>% filter(!Range == "5")
+#add in ages
+bk_count_per_ages <- full_join(bk_count_per,no_five_age_table) 
+
+#calculate se and sd
+bk_count_per_ages_sum <- bk_count_per_ages %>% group_by(Range, sound) %>% 
+                                      summarise(mean_bias = mean(bias),
+                                                sd_bias = sd(bias),
+                                                se_bias=sd_bias/sqrt(n()),
+                                                N=n()) 
+
+
+ggplot(bk_count_per_ages_sum, aes(x = sound, y = mean_bias, fill = sound)) +
+  geom_col(position = "dodge", alpha = 0.4)+
+  geom_point(bk_count_per_ages, mapping = aes(y = bias, color = sound), 
+             position=position_dodge(width=1), alpha = 0.25)+
+  geom_errorbar(aes(y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias),position = "dodge")+
+  theme_light()+
+  facet_wrap("Range")+
+  ylab("bk bias")+
+  xlab("Age Range")
+
+```
+
+
+
+
 bk graph attempt
 ```{r}
 bk_range_plot <-ggplot() +

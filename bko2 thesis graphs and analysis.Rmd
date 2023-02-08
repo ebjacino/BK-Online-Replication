@@ -1,0 +1,655 @@
+First we create the graph of all the 16 stimuli
+
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+library(forcats)
+library(bbmle)      # for ICtab()
+library(car)        # for Anova()
+library(readxl)
+library("writexl")
+
+```
+Colors
+```{r}
+angular_color = "#E01A4F"
+curved_color = "#FFC05C"
+third_color = "#80B8EF"
+```
+
+```{r}
+round_any <- function(x, accuracy, f=round){f(x/ accuracy) * accuracy}
+```
+
+generate CSVs
+
+```{r}
+library(dplyr)
+library(stringr)
+library(tidyverse)
+library(bbmle)      # for ICtab()
+
+
+correct_stim_list = c("sound/DADA.wav" = "bouba",
+                      "sound/MAMA.wav" = "bouba",
+                      "sound/SASA.wav" = "bouba",
+                      "sound/didi.wav" = "bouba",
+                      "sound/sisi.wav" = "bouba",
+                      "sound/mimi.wav" = "bouba",
+                      "sound/FAFA.wav" = "bouba",
+                      "sound/fifi.wav" = "bouba",
+                      "sound/zizi.wav" = "kiki",
+                      "sound/titi.wav" = "kiki",
+                      "sound/TATA.wav" = "kiki",
+                      "sound/KAKA.wav" = "kiki",
+                      "sound/kiki.wav" = "kiki",
+                      "sound/LALA.wav" = "bouba",
+                      "sound/lili.wav" = "bouba",
+                      "sound/ZAZA.wav" = "kiki")
+
+
+	
+	
+left_key = "z"
+right_key = "m"
+
+which_is_correct <- function(stimuli,lefts,rights) {
+  
+  #Make a new vector the same length as the number of rows
+  correct_vec <- rep(NA,length(stimuli))
+  
+  #For each row in the dataset....
+  for(i in seq(1:length(stimuli))){
+    
+    #Get the correct type ("Bouba" or "Kiki") by checking in the stim list
+    correct_type <- correct_stim_list[stimuli[i]]
+    
+    #If the correct type is in the left one the correct key was the left key
+    if(grepl(correct_type, lefts[i], fixed = TRUE)){
+      correct_key <- left_key
+    }
+    #If the correct type is in the right one the correct key was the right key
+    else if(grepl(correct_type, rights[i], fixed = TRUE)){
+      correct_key <- right_key
+    }
+    #If it isn't in either something has gone wrong so you'll get an NA
+    else{
+      correct_key <- NA
+    }
+    
+    #Put that correct key in the output vector
+    correct_vec[i] <- correct_key
+  }
+  
+  #Return the final filled in vector
+  return(correct_vec)
+}
+
+#look at the results files
+
+rds_files <- list.files("bko2 full paradigm RDS",
+                        pattern = "\\.rds$",
+                        full.names = TRUE)
+
+rds_files
+
+for(file in rds_files){
+  print(file)
+  file_id <- str_extract(file,"bkp\\d\\d\\d")
+  #this IS case sensitve, change all RDS names to lowercase 
+  
+  data <- readRDS(file)
+  
+  #assign ID
+  participant_ID <- data$results$`sp_id`[[1]]
+  main_data <- data$results$`Main page`[[1]]
+  
+  
+  df <- read.table(text = main_data, sep =",", header = TRUE, stringsAsFactors = FALSE)
+  #df is the raw data, tells you stimulus and responses
+  
+  
+  ##Ben Code ***creating tidy data and choice bias score***
+  
+  #First remove unneeded columns
+  data_cols <- df %>% select(c(trial_type,stimulus,response,left_image,right_image,correct_response,correct)) 
+  
+  #Then Filter practice and experimental trials
+  data_prac <- data_cols %>% filter(grepl("Prac", stimulus, fixed = TRUE))
+  data_exp <- data_cols %>% filter(!grepl("Prac", stimulus, fixed = TRUE)) %>%
+    filter(trial_type  %in% c("bouba-kiki","image-keyboard-response")) %>%
+    filter(stimulus != "img/fixation.png")
+  
+  #filter out BK data 
+  data_exp_bk <-data_exp %>% filter(trial_type == "bouba-kiki")
+  #filter out the LG data
+  data_exp_lg <-data_exp %>% filter(trial_type =="image-keyboard-response") %>%
+    select(c(trial_type, stimulus, response))
+  
+  #Now write a function to find if the left or the right image is "correct"
+  
+  
+  data_exp_bk <- data_exp_bk %>% mutate(correct_response = which_is_correct(stimulus,left_image,right_image))
+  data_exp_bk <- data_exp_bk %>% mutate(correct = ifelse(correct_response == response,
+                                                         1,
+                                                         ifelse(response == left_key | response == right_key,
+                                                                0,
+                                                                NA)))
+  
+  data_exp_bk <- data_exp_bk %>% mutate(sound = ifelse(stimulus %in% c("sound/DADA.wav","sound/MAMA.wav",
+                                                                 "sound/SASA.wav","sound/didi.wav",
+                                                                 "sound/sisi.wav","sound/mimi.wav",
+                                                                 "sound/FAFA.wav","sound/fifi.wav","sound/LALA.wav",
+                                                                 "sound/lili.wav"),"curved",
+                                                 ifelse(stimulus %in% c("sound/zizi.wav","sound/titi.wav",
+                                                                        "sound/TATA.wav","sound/KAKA.wav",
+                                                                        "sound/kiki.wav","sound/ZAZA.wav"),"angular",
+                                                        NA))) %>% filter(!is.na(correct))
+  
+  data_exp_bk <- data_exp_bk %>% mutate(vowel_type = ifelse(stimulus %in% c("sound/DADA.wav","sound/MAMA.wav",
+                                                                       "sound/SASA.wav","sound/TATA.wav",
+                                                                       "sound/KAKA.wav","sound/ZAZA.wav",
+                                                                       "sound/FAFA.wav","sound/LALA.wav"),"/a/",
+                                                       
+                                                       ifelse(stimulus %in% c("sound/zizi.wav","sound/titi.wav",
+                                                                              "sound/didi.wav","sound/sisi.wav",
+                                                                              "sound/kiki.wav","sound/fifi.wav",
+                                                                              "sound/lili.wav","sound/mimi.wav"),"/i/",
+                                                              NA))) %>% filter(!is.na(correct))
+  
+  data_exp_bk <- data_exp_bk %>% mutate(congruent = ifelse(stimulus %in% c("sound/DADA.wav","sound/MAMA.wav",
+                                                                            "sound/SASA.wav","sound/zizi.wav",
+                                                                            "sound/kiki.wav","sound/LALA.wav",
+                                                                            "sound/FAFA.wav","sound/titi.wav"),"congruent",
+                                                            
+                                                            ifelse(stimulus %in% c("sound/TATA.wav","sound/lili.wav",
+                                                                                   "sound/didi.wav","sound/sisi.wav",
+                                                                                   "sound/KAKA.wav","sound/fifi.wav",
+                                                                                   "sound/ZAZA.wav","sound/mimi.wav"),"incongruent",
+                                                                   NA))) %>% filter(!is.na(correct))
+  
+  data_exp_bk <- data_exp_bk %>% mutate(voicing = ifelse(stimulus %in% c("sound/DADA.wav","sound/MAMA.wav",
+                                                                           "sound/LALA.wav","sound/zizi.wav",
+                                                                           "sound/didi.wav","sound/lili.wav",
+                                                                           "sound/ZAZA.wav","sound/mimi.wav"),"voiced",
+                                                           
+                                                           ifelse(stimulus %in% c("sound/TATA.wav","sound/SASA.wav",
+                                                                                  "sound/kiki.wav","sound/sisi.wav",
+                                                                                  "sound/KAKA.wav","sound/fifi.wav",
+                                                                                  "sound/FAFA.wav","sound/titi.wav"),"unvoiced",
+                                                                  NA))) %>% filter(!is.na(correct))
+  
+  data_exp_bk <- data_exp_bk %>% mutate(consonant_type = ifelse(stimulus %in% c("sound/DADA.wav","sound/didi.wav",
+                                                                         "sound/TATA.wav","sound/titi.wav",
+                                                                         "sound/kiki.wav","sound/KAKA.wav"), "stop",
+                                                   ifelse(stimulus %in% c("sound/MAMA.wav","sound/LALA.wav",
+                                                                        "sound/lili.wav","sound/mimi.wav"),"sonorant",
+                                                         
+                                                         ifelse(stimulus %in% c("sound/SASA.wav","sound/ZAZA.wav",
+                                                                                "sound/sisi.wav","sound/zizi.wav",
+                                                                                "sound/fifi.wav", "sound/FAFA.wav"),"fricative",
+                                                                NA)))) %>% filter(!is.na(correct))
+  
+  
+  
+  #file pathing
+  file_path_bk <- paste0("bko2 full paradigm CSVs/",file_id,"_bk.csv")
+
+  file_path_prac <- paste0("bko2 full paradigm practice trials/",file_id,".csv")
+  write.csv(data_prac, file_path_prac)
+  
+  write.csv(data_exp_bk, file_path_bk) 
+
+}
+
+
+```
+
+
+```{r}
+all_files <- list.files("bko2 full paradigm CSVs")
+first_file <- TRUE
+
+#Adds ID code onto each trial, binds all individual csvs into one large dataframe
+for(i in 1:length(all_files)){
+  if(grepl("b",all_files[i])){
+    print(all_files[i])
+    if(first_file){
+      all_data_df <- read.csv(paste0("bko2 full paradigm CSVs/",all_files[i]))
+      all_data_df <- all_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      first_file <- FALSE
+    }
+    else{
+      new_data_df <- read.csv(paste0("bko2 full paradigm CSVs/",all_files[i]))
+      new_data_df <- new_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      all_data_df <- rbind(all_data_df,new_data_df)
+    }
+  }
+}
+
+#filter out the NAs
+all_data_df <- all_data_df %>% filter(!is.na(correct))
+
+unique(all_data_df$ID)
+left_key = "z"
+right_key = "m"
+```
+
+add in ages
+```{r}
+age_table <- read_excel("bko2 age table.xlsx")
+all_data_df <- full_join(all_data_df,age_table, by="ID")
+```
+
+
+```{r}
+#CALCULATE CHOICE BIAS
+#group_by(ID,sound,group) group for when i have both adults and children
+data_orth <- all_data_df %>% group_by(ID,sound) %>%
+  summarise(bias = sum(correct)/n())
+
+data_all_sounds <- all_data_df %>% group_by(ID,sound,stimulus) %>%
+  summarise(bias = sum(correct)/n())
+
+data_vowel_type <- all_data_df %>% group_by(vowel_type, ID) %>%
+  summarise(bias = sum(correct)/n())
+
+data_congruency = all_data_df %>% group_by(congruent, ID) %>%
+  summarise(bias = sum(correct)/n())
+
+data_voicing = all_data_df %>% group_by(voicing, ID) %>%
+  summarise(bias = sum(correct)/n())
+
+data_consonant = all_data_df %>% group_by(consonant_type, ID) %>%
+  summarise(bias = sum(correct)/n())
+
+#data_consonant_type = all_data_df_c %>% group_by(consonant_type, ID) %>%
+  #summarise(bias = sum(sharp_shape_choice)/n())
+```
+
+```{r}
+#listing comparisons for significance bars
+#bias for orthography
+orth_comparisons <- list( c("angular", "curved"))
+
+#bias for vowel type
+vowel_comparisions <- list( c("/a/", "/i/"))
+
+#bias for congruency
+congruency_comparisions <- list( c("congruent", "incongruent"))
+
+#bias for voicing
+voicing_comparisions <- list( c("unvoiced", "voiced"))
+
+#bias for consonant type
+consonant_comparisons <- list( c("stop", "fricative"),
+                        c("fricative", "sonorant"),
+                        c("stop", "sonorant"))
+
+```
+
+
+```{r}
+#all_data_df <- read.csv("all_data_df.csv")
+#this csv file has lala and lili as angular 
+```
+
+```{r}
+stimulus_bias_data <- all_data_df %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+                                      group_by(ID,stimulus,sound,Range) %>% 
+                                      summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      mutate(bias = ifelse(sound == "angular",-1*bias,bias)) %>%
+                                      group_by(stimulus,sound,Range) %>%
+                                      summarize(mean_bias = mean(bias),
+                                                sd_bias = sd(bias),
+                                                se_bias=sd_bias/sqrt(n()),
+                                                N = n()) %>%
+                                      ungroup() %>%
+                                      mutate(stimulus = fct_reorder2(stimulus, sound, mean_bias))
+
+stimulus_bias_data_points <- all_data_df %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+                                      group_by(ID,stimulus,sound,Range) %>% 
+                                      summarise(bias = sum(correct)/n() - 0.5) %>% 
+                                      ungroup() %>%
+                                      mutate(bias = ifelse(sound == "angular",-1*bias,bias)) %>%
+                                      mutate(bias_round = round_any(bias,0.25)) %>%
+                                      group_by(stimulus,sound,bias) %>%
+                                      summarise(Count = n())
+```
+
+ALL STIM GRAPH
+
+```{r}
+
+new_color_all_stim <- ggplot() +
+  geom_col(stimulus_bias_data, mapping = aes(x = stimulus, y = mean_bias), color = "black", fill = NA) +
+  geom_point(stimulus_bias_data_points, mapping =aes(x = stimulus, y = bias, size = Count, color= sound)) +
+  geom_col(stimulus_bias_data, mapping = aes(x = stimulus, y = mean_bias, fill = sound), alpha = 0.5) +
+  geom_point(stimulus_bias_data, mapping = aes(x = stimulus, y = mean_bias)) +
+  geom_errorbar(stimulus_bias_data, mapping = aes(x = stimulus, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1) +
+  scale_fill_manual(values = c(angular_color,curved_color)) +
+  scale_color_manual(values = c(angular_color,curved_color)) +
+  theme_classic() +
+  ylim(-0.5,0.5) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  ylab("Choice Bias") +
+  xlab("Stimulus") +
+  facet_wrap("Range")
+
+new_color_all_stim
+#ggsave("graphs/presentation graphs/kids_all_stim.png", width = 10, height = 5)
+```
+ANALYSIS WITH BONFERONNI CORRECTION 
+```{r}
+stim_m <- glm(correct ~ 0 + stimulus, data = all_data_df, family = binomial)
+summary(stim_m)#$coefficients[,4]
+
+
+
+stim_tib <- tibble(categories = row.names(summary(ben_m)$coefficients),
+                  old_p = summary(stim_m)$coefficients[,4],
+                  p_vals = p.adjust(summary(stim_m)$coefficients[,4], method = "bonferroni", n = 16),
+                  p_val_print = sprintf("%.10f", p_vals),
+                  sig = ifelse(p_vals<0.05, "significant", "nonsignificant"))
+stim_tib
+
+```
+
+
+
+orthography graph
+```{r}
+                                      
+orth_new <- all_data_df %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+                                      group_by(ID,sound,Range) %>% 
+                                      summarise(bias = sum(correct)/n()- 0.5) %>%  
+                                      mutate(bias = ifelse(sound == "angular",-1*bias,bias)) %>%
+                                      group_by(sound,Range) %>%
+                                      summarize(mean_bias = mean(bias),
+                                                sd_bias = sd(bias),
+                                                se_bias=sd_bias/sqrt(n())) 
+
+orth_new_points <- all_data_df %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+                                      group_by(ID,sound,Range) %>% 
+                                      summarise(bias = sum(correct)/n()- 0.5) %>% 
+                                      ungroup() %>%
+                                      mutate(bias = ifelse(sound == "angular",-1*bias,bias)) %>%
+                                      mutate(bias_round = round_any(bias,0.25)) %>%
+                                      group_by(sound,bias_round) %>%
+                                      summarise(Count = n())
+
+new_orthography <- ggplot(data_orth, aes(x = sound, y = bias)) +
+  geom_col(orth_new, mapping = aes(x = sound, y = mean_bias), color = "black", fill = NA) +
+  geom_point(orth_new_points, mapping = aes(x = sound, y = bias_round, size = Count, color = sound)) +
+  geom_col(orth_new, mapping = aes(x = sound, y = mean_bias, fill = sound), alpha = 0.5) +
+  geom_point(orth_new, mapping = aes(x = sound, y = mean_bias)) +
+  geom_errorbar(orth_new, mapping = aes(x = sound, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
+  #stat_compare_means(comparisons = orth_comparisons, label.y = c(1.2),
+                    #label = "p.signif", hide.ns = FALSE) +
+  theme_classic() +
+  ylim(-.5, .5) +
+  scale_fill_manual(values = c(angular_color,curved_color)) +
+  scale_color_manual(values = c(angular_color,curved_color)) +
+  scale_size_continuous(breaks = c(5, 10, 15)) +
+  ylab("Choice Bias") +
+  xlab("Sound") +
+  facet_wrap("Range")
+
+new_orthography
+
+#ggsave("graphs/presentation graphs/sig orthography.png", height = 3.5, width = 3.5)
+```
+ANALYSIS FOR ORTHOGRAPHY
+```{r}
+# One-sample t-test
+orth <- t.test(bias ~ sound, data = data_orth)
+# Printing the results
+orth 
+```
+
+
+
+CONGRUENCY GRAPH
+
+```{r}
+congruency_new <- all_data_df %>% group_by(congruent, ID) %>% 
+                                      summarise(bias = sum(correct)/n()) %>% 
+                                      #mutate(bias = ifelse(congruent == "incongruent",-1*bias,bias)) %>%
+                                      #ungroup()%>%
+                                      group_by(congruent) %>%
+                                      summarize(mean_bias = mean(bias),
+                                                sd_bias = sd(bias),
+                                                se_bias=sd_bias/sqrt(n())) 
+
+congruency_new_points <- all_data_df %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+                                      group_by(congruent, ID) %>% 
+                                      summarise(bias = sum(correct)/n()) %>% 
+                                      ungroup() %>%
+                                      #mutate(bias = ifelse(congruent == "incongruent",-1*bias,bias)) %>%
+                                      mutate(bias_round = round_any(bias,0.25)) %>%
+                                      group_by(congruent,bias_round) %>%
+                                      summarise(Count = n())
+
+congruency_plot_new <- ggplot(data_congruency, aes(x = congruent, y = bias)) +
+  geom_col(congruency_new, mapping = aes(x = congruent, y = mean_bias), color = "black", fill = NA) +
+  geom_point(congruency_new_points, mapping = aes(x = congruent, y = bias_round, size = Count, color = congruent)) +
+  geom_col(congruency_new, mapping = aes(x = congruent, y = mean_bias, fill = congruent), alpha = 0.5) +
+  geom_point(congruency_new, mapping = aes(x = congruent, y = mean_bias)) +
+  geom_errorbar(congruency_new, mapping = aes(x = congruent, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
+  stat_compare_means(comparisons = congruency_comparisions, label.y = c(1.2),
+                    label = "p.signif", hide.ns = TRUE) +
+  scale_fill_manual(values = c(angular_color,curved_color)) +
+  scale_color_manual(values = c(angular_color,curved_color)) +
+  theme_classic() +
+  #ylim(-0.5,0.5) +
+  ylab("Choice Bias") +
+  scale_y_continuous(limits = c(0, 1.5), breaks = c(0.00, 0.25, 0.50, 0.75, 1)) +
+  xlab("Congruency")
+
+congruency_plot_new
+ggsave("graphs/presentation graphs/congruency_plot_new.png", height = 3.5, width = 3.5)
+```
+analysis
+```{r}
+#what is the difference between congruent and incongruent?
+# One-sample t-test
+con <- t.test(bias ~ congruent, data = data_congruency)
+# Printing the results
+con 
+```
+
+
+
+GRAPH FOR VOWEL TYPE
+```{r}
+vowel_type_mean <- all_data_df %>%  group_by(vowel_type,ID) %>% 
+                                      summarise(bias = sum(correct)/n()) %>% 
+                                      #mutate(bias = ifelse(vowel_type == "/i/",-1*bias,bias)) %>%
+                                      group_by(vowel_type) %>%
+                                      summarize(mean_bias = mean(bias),
+                                                sd_bias = sd(bias),
+                                                se_bias=sd_bias/sqrt(n())) 
+
+vowel_points <- all_data_df %>% group_by(vowel_type,ID) %>% 
+                                      summarise(bias = sum(correct)/n()) %>% 
+                                      ungroup() %>%
+                                      #mutate(bias = ifelse(vowel_type == "/i/",-1*bias,bias)) %>%
+                                      mutate(bias_round = round_any(bias,0.25)) %>%
+                                      group_by(vowel_type,bias_round) %>%
+                                      summarise(Count = n())
+
+vowel_plot <- ggplot(data_vowel_type, aes(x = vowel_type, y = bias)) +
+  geom_col(vowel_type_mean, mapping = aes(x = vowel_type, y = mean_bias), color = "black", fill = NA) +
+  geom_point(vowel_points, mapping = aes(x = vowel_type, y = bias_round, size = Count, color = vowel_type)) +
+  geom_col(vowel_type_mean, mapping = aes(x = vowel_type, y = mean_bias, fill = vowel_type), alpha = 0.5) +
+  geom_point(vowel_type_mean, mapping = aes(x = vowel_type, y = mean_bias)) +
+  geom_errorbar(vowel_type_mean, mapping = aes(x = vowel_type, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
+  stat_compare_means(comparisons = vowel_comparisions, label.y = c(1.2),
+                    label = "p.signif", hide.ns = TRUE) +
+  theme_classic() +
+  ylim(0, 1.5) +
+  scale_fill_manual(values = c(curved_color,angular_color)) +
+  scale_color_manual(values = c(curved_color,angular_color)) +
+  scale_size_continuous(breaks = c(5, 10, 15)) +
+  ylab("Choice Bias") +
+  xlab("Vowel type")
+
+vowel_plot
+
+ggsave("graphs/presentation graphs/vowel plot.png", height = 3.5, width = 3.5)
+```
+ANALYSIS FOR VOWEL TYPE
+```{r}
+#what is the difference between /a/ and /i/?
+# One-sample t-test
+vow <- t.test(bias ~ vowel_type, data = data_vowel_type)
+# Printing the results
+vow 
+```
+GRAPH FOR CONSONANT VOICING
+```{r}
+voicing_mean <- all_data_df %>%  group_by(voicing,ID) %>% 
+                                      summarise(bias = sum(correct)/n()) %>% 
+                                      #mutate(bias = ifelse(voicing == "/i/",-1*bias,bias)) %>%
+                                      group_by(voicing) %>%
+                                      summarize(mean_bias = mean(bias),
+                                                sd_bias = sd(bias),
+                                                se_bias=sd_bias/sqrt(n())) 
+
+voicing_points <- all_data_df %>% group_by(voicing,ID) %>% 
+                                      summarise(bias = sum(correct)/n()) %>% 
+                                      ungroup() %>%
+                                      #mutate(bias = ifelse(voicing == "/i/",-1*bias,bias)) %>%
+                                      mutate(bias_round = round_any(bias,0.25)) %>%
+                                      group_by(voicing,bias_round) %>%
+                                      summarise(Count = n())
+
+voicing_plot <- ggplot(data_voicing, aes(x = voicing, y = bias)) +
+  geom_col(voicing_mean, mapping = aes(x = voicing, y = mean_bias), color = "black", fill = NA) +
+  geom_point(voicing_points, mapping = aes(x = voicing, y = bias_round, size = Count, color = voicing)) +
+  geom_col(voicing_mean, mapping = aes(x = voicing, y = mean_bias, fill = voicing), alpha = 0.5) +
+  geom_point(voicing_mean, mapping = aes(x = voicing, y = mean_bias)) +
+  geom_errorbar(voicing_mean, mapping = aes(x = voicing, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
+  stat_compare_means(comparisons = voicing_comparisions, label.y = c(1.2),
+                    label = "p.signif", hide.ns = TRUE) +
+  theme_classic() +
+  ylim(0, 1.5) +
+  scale_fill_manual(values = c(curved_color,angular_color)) +
+  scale_color_manual(values = c(curved_color,angular_color)) +
+  scale_size_continuous(breaks = c(5, 10, 15)) +
+  ylab("Choice Bias") +
+  xlab("Consonant voicing")
+
+voicing_plot
+
+#ggsave("graphs/presentation graphs/voicing plot.png", height = 3.5, width = 3.5)
+```
+ANALYSIS FOR CONSONANT VOICING
+```{r}
+# One-sample t-test
+voi <- t.test(bias ~ voicing, data = data_voicing)
+# Printing the results
+voi 
+```
+
+
+
+
+```{r}
+#bias for consonant type
+consonant_comparisons <- list( c("stop", "fricative"),
+                        c("fricative", "sonorant"),
+                        c("stop", "sonorant"))
+                        
+
+ggplot(data_consonant, aes(x = consonant_type, y = bias)) +
+  geom_boxplot() +
+  #  facet_wrap(~ group) +
+  stat_summary(fun.y=mean, geom="point", shape=20, size=5, color="black", fill="black") +
+  ylim(0,2) +
+  theme_light()+
+  stat_compare_means(comparisons = consonant_comparisons, label.y = c(1.1, 1.3, 1.5),
+                     label = "p.signif", hide.ns = TRUE)
+```
+
+I need to know: how often was a round shape chosen when given each of the 3 consonant types?
+first add column to all_data_df
+
+```{r}
+all_data_df_c <- all_data_df %>% mutate(round_shape_choice = ifelse(grepl("bouba",left_image)  & response == left_key,
+                                                         1,
+                                                         ifelse(grepl("bouba",right_image)  & response == right_key, 1,
+                                                         0))) %>% 
+  mutate(sharp_shape_choice = ifelse(grepl("kiki",left_image)  & response == left_key,
+                                                         1,
+                                                         ifelse(grepl("kiki",right_image)  & response == right_key, 1,
+                                                         0)))
+```
+
+make consonant graph
+
+```{r}
+consonant_graph_df <- all_data_df_c %>% group_by(ID,consonant_type) %>% 
+                                      summarise(bias = sum(sharp_shape_choice)/n()) %>% 
+                                      #mutate(bias = ifelse(sound == "angular",-1*bias,bias)) %>%
+                                      group_by(consonant_type) %>%
+                                      summarize(mean_bias = mean(bias),
+                                                sd_bias = sd(bias),
+                                                se_bias=sd_bias/sqrt(n())) 
+
+consonant_graph_points <- all_data_df_c %>% group_by(ID,consonant_type) %>% 
+                                      summarise(bias = sum(sharp_shape_choice)/n()) %>% 
+                                      ungroup() %>%
+                                      #mutate(bias = ifelse(sound == "angular",-1*bias,bias)) %>%
+                                      mutate(bias_round = round_any(bias,0.25)) %>%
+                                      group_by(consonant_type,bias_round) %>%
+                                      summarise(Count = n())
+
+consonant_graph <- ggplot(data_consonant_type, aes(x = consonant_type, y = bias)) +
+  geom_col(consonant_graph_df, mapping = aes(x = consonant_type, y = mean_bias), color = "black", fill = NA) +
+  geom_point(consonant_graph_points, mapping = aes(x = consonant_type, y = bias_round, size = Count, color = consonant_type)) +
+  geom_col(consonant_graph_df, mapping = aes(x = consonant_type, y = mean_bias, fill = consonant_type), alpha = 0.5) +
+  geom_point(consonant_graph_df, mapping = aes(x = consonant_type, y = mean_bias)) +
+  geom_errorbar(consonant_graph_df, mapping = aes(x = consonant_type, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
+  theme_classic() +
+  ylim(0,1.8) +
+  scale_fill_manual(values = c(angular_color,curved_color,third_color)) +
+  scale_color_manual(values = c(angular_color,curved_color,third_color)) +
+  scale_size_continuous(breaks = c(5, 10, 15)) +
+  stat_compare_means(comparisons = consonant_comparisons, label.y = c(1.1, 1.3, 1.5),
+                    label = "p.signif", hide.ns = FALSE) +
+  ylab("Proportion of sharp shape choices") +
+  xlab("consonant type")
+
+consonant_graph
+
+#ggsave("graphs/presentation graphs/consonant_type.png", width = 5, height = 3)
+```
+ANALYSIS FOR CONSONANT TYPE
+```{r}
+m_c <- glm(sharp_shape_choice ~ consonant_type, data = all_data_df_c)
+
+Anova(m_c)
+
+contrast(emmeans(m_c, ~ consonant_type) , method = "pairwise", type = "response")
+
+bko2_consonant_table <-contrast(emmeans(m_c, ~ consonant_type) , method = "pairwise", type = "response")
+
+write.csv(bko2_consonant_table, "significance tables/bko2_consonant_table.csv")
+```
+
+
+
+```{r}
+ggplot(data_consonant, aes(x = consonant_type, y = bias)) +
+  geom_boxplot() +
+  #  facet_wrap(~ group) +
+  stat_summary(fun.y=mean, geom="point", shape=20, size=5, color="black", fill="black") +
+  ylim(0,2) +
+  theme_light()+
+  stat_compare_means(comparisons = consonant_comparisons, label.y = c(1.1, 1.3, 1.5),
+                     label = "p.signif", hide.ns = TRUE)
+```
+
