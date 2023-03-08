@@ -6,6 +6,7 @@ library(tidyverse)
 library(ggplot2)
 library(ggpubr)
 library(forcats)
+library(emmeans)
 library(bbmle)      # for ICtab()
 library(car)        # for Anova()
 library(readxl)
@@ -247,22 +248,22 @@ all_data_df <- full_join(all_data_df,age_table, by="ID")
 ```{r}
 #CALCULATE CHOICE BIAS
 #group_by(ID,sound,group) group for when i have both adults and children
-data_orth <- all_data_df %>% group_by(ID,sound) %>%
+data_orth <- all_data_df %>% group_by(ID,sound,Range) %>%
   summarise(bias = sum(correct)/n())
 
 data_all_sounds <- all_data_df %>% group_by(ID,sound,stimulus) %>%
   summarise(bias = sum(correct)/n())
 
-data_vowel_type <- all_data_df %>% group_by(vowel_type, ID) %>%
+data_vowel_type <- all_data_df %>% group_by(vowel_type, ID,Range) %>%
   summarise(bias = sum(correct)/n())
 
-data_congruency = all_data_df %>% group_by(congruent, ID) %>%
+data_congruency = all_data_df %>% group_by(congruent, ID,Range) %>%
   summarise(bias = sum(correct)/n())
 
-data_voicing = all_data_df %>% group_by(voicing, ID) %>%
+data_voicing = all_data_df %>% group_by(voicing, ID,Range) %>%
   summarise(bias = sum(correct)/n())
 
-data_consonant = all_data_df %>% group_by(consonant_type, ID) %>%
+data_consonant = all_data_df %>% group_by(consonant_type, ID,Range) %>%
   summarise(bias = sum(correct)/n())
 
 #data_consonant_type = all_data_df_c %>% group_by(consonant_type, ID) %>%
@@ -272,7 +273,7 @@ data_consonant = all_data_df %>% group_by(consonant_type, ID) %>%
 ```{r}
 #listing comparisons for significance bars
 #bias for orthography
-orth_comparisons <- list( c("angular", "curved"))
+orth_comparisons <- list( c("6 to 8", "9 to 11", "Adult"))
 
 #bias for vowel type
 vowel_comparisions <- list( c("/a/", "/i/"))
@@ -343,14 +344,15 @@ new_color_all_stim
 ```
 ANALYSIS WITH BONFERONNI CORRECTION 
 ```{r}
-stim_m <- glm(correct ~ 0 + stimulus, data = all_data_df, family = binomial)
+#stimulus:Range gets you the interaction term, which is the difference from 0 for each stimulus for each age range
+stim_m <- glm(correct ~ 0 + stimulus:Range, data = all_data_df, family = binomial)
 summary(stim_m)#$coefficients[,4]
 
 
-
-stim_tib <- tibble(categories = row.names(summary(ben_m)$coefficients),
+#bonferroni correction
+stim_tib <- tibble(categories = row.names(summary(stim_m)$coefficients),
                   old_p = summary(stim_m)$coefficients[,4],
-                  p_vals = p.adjust(summary(stim_m)$coefficients[,4], method = "bonferroni", n = 16),
+                  p_vals = p.adjust(summary(stim_m)$coefficients[,4], method = "bonferroni", n = 16*3),
                   p_val_print = sprintf("%.10f", p_vals),
                   sig = ifelse(p_vals<0.05, "significant", "nonsignificant"))
 stim_tib
@@ -386,7 +388,7 @@ new_orthography <- ggplot(data_orth, aes(x = sound, y = bias)) +
   geom_col(orth_new, mapping = aes(x = sound, y = mean_bias, fill = sound), alpha = 0.5) +
   geom_point(orth_new, mapping = aes(x = sound, y = mean_bias)) +
   geom_errorbar(orth_new, mapping = aes(x = sound, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
-  #stat_compare_means(comparisons = orth_comparisons, label.y = c(1.2),
+#stat_compare_means(comparisons = orth_comparisons, label.y = c(1),
                     #label = "p.signif", hide.ns = FALSE) +
   theme_classic() +
   ylim(-.5, .5) +
@@ -400,36 +402,72 @@ new_orthography <- ggplot(data_orth, aes(x = sound, y = bias)) +
 new_orthography
 
 #ggsave("graphs/presentation graphs/sig orthography.png", height = 3.5, width = 3.5)
+
 ```
-ANALYSIS FOR ORTHOGRAPHY
+How to tell if the bars as graphed are different form each other- is the opposite direction of them strong enough? The direction is significantly in the expected direction 
 ```{r}
-# One-sample t-test
-orth <- t.test(bias ~ sound, data = data_orth)
-# Printing the results
-orth 
+
 ```
 
 
+
+how to tell if the age groups are different from each other
+
+```{r}
+#by range
+m_range <- glm(bias ~ Range, data = data_orth)
+m_sound <- glm(bias ~ sound, data = data_orth)
+m_mult <- glm(bias ~ Range*sound, data = data_orth)
+m_add <- glm(bias ~ Range+sound, data = data_orth)
+#trying to find the model that best fits the data with the least number of terms. not over or under fit to the data. 
+#IC tab multiplies the residuals by the number of terms, higher number is worse
+ICtab(m_range,m_sound,m_mult, m_add)
+
+Anova(m_mult)
+
+contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
+bko1_range_difference_table <-contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
+
+
+```
+
+IS THERE A SIGNIFICANT DIFFERENCE FROM 0?
+ you want to see if every group is different from zero, and so you want a model that just looks at the smallest groups (each sound for each age group), with none of the big groupings. that’s why you just look at the interaction, not sound*range. This is doing those 6 individual t tests, and correcting for the number of t tests at the same time. 
+```{r}
+#sound:Range gets you the interaction term, which is the difference from 0 for each stimulus for each age range
+stim_o <- glm(bias ~ 0 + sound:Range, data = data_orth, family = binomial)
+summary(stim_o)
+
+
+#bonferroni correction, not sure if necessary for only 6 t tests so disregard this
+stim_tib <- tibble(categories = row.names(summary(stim_m)$coefficients),
+                  old_p = summary(stim_m)$coefficients[,4],
+                  p_vals = p.adjust(summary(stim_m)$coefficients[,4], method = "bonferroni", n = 16*3),
+                  p_val_print = sprintf("%.10f", p_vals),
+                  sig = ifelse(p_vals<0.05, "significant", "nonsignificant"))
+stim_tib
+
+```
 
 CONGRUENCY GRAPH
 
 ```{r}
-congruency_new <- all_data_df %>% group_by(congruent, ID) %>% 
+congruency_new <- all_data_df %>% group_by(congruent, ID,Range) %>% 
                                       summarise(bias = sum(correct)/n()) %>% 
                                       #mutate(bias = ifelse(congruent == "incongruent",-1*bias,bias)) %>%
                                       #ungroup()%>%
-                                      group_by(congruent) %>%
+                                      group_by(congruent,Range) %>%
                                       summarize(mean_bias = mean(bias),
                                                 sd_bias = sd(bias),
                                                 se_bias=sd_bias/sqrt(n())) 
 
 congruency_new_points <- all_data_df %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
-                                      group_by(congruent, ID) %>% 
+                                      group_by(congruent, ID,Range) %>% 
                                       summarise(bias = sum(correct)/n()) %>% 
                                       ungroup() %>%
                                       #mutate(bias = ifelse(congruent == "incongruent",-1*bias,bias)) %>%
                                       mutate(bias_round = round_any(bias,0.25)) %>%
-                                      group_by(congruent,bias_round) %>%
+                                      group_by(congruent,bias_round,Range) %>%
                                       summarise(Count = n())
 
 congruency_plot_new <- ggplot(data_congruency, aes(x = congruent, y = bias)) +
@@ -438,29 +476,52 @@ congruency_plot_new <- ggplot(data_congruency, aes(x = congruent, y = bias)) +
   geom_col(congruency_new, mapping = aes(x = congruent, y = mean_bias, fill = congruent), alpha = 0.5) +
   geom_point(congruency_new, mapping = aes(x = congruent, y = mean_bias)) +
   geom_errorbar(congruency_new, mapping = aes(x = congruent, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
-  stat_compare_means(comparisons = congruency_comparisions, label.y = c(1.2),
-                    label = "p.signif", hide.ns = TRUE) +
+  #stat_compare_means(comparisons = congruency_comparisions, label.y = c(1.2),
+                    #label = "p.signif", hide.ns = TRUE) +
   scale_fill_manual(values = c(angular_color,curved_color)) +
   scale_color_manual(values = c(angular_color,curved_color)) +
   theme_classic() +
   #ylim(-0.5,0.5) +
   ylab("Choice Bias") +
   scale_y_continuous(limits = c(0, 1.5), breaks = c(0.00, 0.25, 0.50, 0.75, 1)) +
-  xlab("Congruency")
+  xlab("Congruency") +
+  facet_wrap("Range")
 
 congruency_plot_new
-ggsave("graphs/presentation graphs/congruency_plot_new.png", height = 3.5, width = 3.5)
+#ggsave("graphs/presentation graphs/congruency_plot_new.png", height = 3.5, width = 3.5)
 ```
 analysis
+how to tell if the age groups are different from each other
+
 ```{r}
-#what is the difference between congruent and incongruent?
-# One-sample t-test
-con <- t.test(bias ~ congruent, data = data_congruency)
-# Printing the results
-con 
+#by range. is there a difference between bias for congruent/incongruent words for different age ranges?
+m_range_c <- glm(bias ~ Range, data = data_congruency)
+m_sound_c <- glm(bias ~ congruent, data = data_congruency)
+m_mult_c <- glm(bias ~ Range*congruent, data = data_congruency)
+m_add_c <- glm(bias ~ Range+congruent, data = data_congruency)
+#trying to find the model that best fits the data with the least number of terms. not over or under fit to the data. 
+#IC tab multiplies the residuals by the number of terms, higher number is worse
+ICtab(m_range_c,m_sound_c,m_mult_c, m_add_c)
+
+Anova(m_add_c)
+
+contrast(emmeans(m_add_c, ~ Range | congruent) , method = "pairwise", type = "response")
+#bko1_range_difference_table <-contrast(emmeans(m_add_c, ~ Range | sound) , method = "pairwise", type = "response")
 ```
+analysis
+how to tell if there is a difference between congruent and incongruent for each age group
+```{r}
+congruency_a <- glm(bias ~congruent+Range, data = data_congruency)
+congruency_m <- glm(bias ~congruent*Range, data = data_congruency)
+#model of only the interaction term
+congruency_i <- glm(bias ~congruent:Range, data = data_congruency)
 
+Anova(congruency_i)
 
+#this will tell you what the differences are between congruent/incongruent for each age range
+contrast(emmeans(congruency_i, ~ congruent | Range) , method = "pairwise", type = "response") #order of terms matters here, difference in congruent for each age range
+
+```
 
 GRAPH FOR VOWEL TYPE
 ```{r}
@@ -498,7 +559,7 @@ vowel_plot <- ggplot(data_vowel_type, aes(x = vowel_type, y = bias)) +
 
 vowel_plot
 
-ggsave("graphs/presentation graphs/vowel plot.png", height = 3.5, width = 3.5)
+#ggsave("graphs/presentation graphs/vowel plot.png", height = 3.5, width = 3.5)
 ```
 ANALYSIS FOR VOWEL TYPE
 ```{r}
@@ -510,7 +571,7 @@ vow
 ```
 GRAPH FOR CONSONANT VOICING
 ```{r}
-voicing_mean <- all_data_df %>%  group_by(voicing,ID) %>% 
+voicing_mean <- all_data_df %>%  group_by(voicing,ID,Range) %>% 
                                       summarise(bias = sum(correct)/n()) %>% 
                                       #mutate(bias = ifelse(voicing == "/i/",-1*bias,bias)) %>%
                                       group_by(voicing) %>%
@@ -518,7 +579,7 @@ voicing_mean <- all_data_df %>%  group_by(voicing,ID) %>%
                                                 sd_bias = sd(bias),
                                                 se_bias=sd_bias/sqrt(n())) 
 
-voicing_points <- all_data_df %>% group_by(voicing,ID) %>% 
+voicing_points <- all_data_df %>% group_by(voicing,ID,Range) %>% 
                                       summarise(bias = sum(correct)/n()) %>% 
                                       ungroup() %>%
                                       #mutate(bias = ifelse(voicing == "/i/",-1*bias,bias)) %>%
@@ -532,15 +593,16 @@ voicing_plot <- ggplot(data_voicing, aes(x = voicing, y = bias)) +
   geom_col(voicing_mean, mapping = aes(x = voicing, y = mean_bias, fill = voicing), alpha = 0.5) +
   geom_point(voicing_mean, mapping = aes(x = voicing, y = mean_bias)) +
   geom_errorbar(voicing_mean, mapping = aes(x = voicing, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
-  stat_compare_means(comparisons = voicing_comparisions, label.y = c(1.2),
-                    label = "p.signif", hide.ns = TRUE) +
+  #stat_compare_means(comparisons = voicing_comparisions, label.y = c(1.2),
+                    #label = "p.signif", hide.ns = TRUE) +
   theme_classic() +
   ylim(0, 1.5) +
   scale_fill_manual(values = c(curved_color,angular_color)) +
   scale_color_manual(values = c(curved_color,angular_color)) +
   scale_size_continuous(breaks = c(5, 10, 15)) +
   ylab("Choice Bias") +
-  xlab("Consonant voicing")
+  xlab("Consonant voicing")+
+  facet_wrap("Range")
 
 voicing_plot
 
