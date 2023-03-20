@@ -11,6 +11,7 @@ library(bbmle)      # for ICtab()
 library(car)        # for Anova()
 library(readxl)
 library("writexl")
+library(viridis)
 
 ```
 Colors
@@ -242,6 +243,11 @@ add in ages
 ```{r}
 age_table <- read_excel("bko2 age table.xlsx")
 all_data_df <- full_join(all_data_df,age_table, by="ID")
+```
+add in WJ scores
+```{r}
+WJ_scores <- read_excel("WJ scores.xlsx")
+all_data_df <- full_join(all_data_df,WJ_scores, by="ID")
 ```
 
 
@@ -615,9 +621,7 @@ voi <- t.test(bias ~ voicing, data = data_voicing)
 # Printing the results
 voi 
 ```
-
-
-
+consonant type
 
 ```{r}
 #bias for consonant type
@@ -702,8 +706,6 @@ bko2_consonant_table <-contrast(emmeans(m_c, ~ consonant_type) , method = "pairw
 write.csv(bko2_consonant_table, "significance tables/bko2_consonant_table.csv")
 ```
 
-
-
 ```{r}
 ggplot(data_consonant, aes(x = consonant_type, y = bias)) +
   geom_boxplot() +
@@ -713,5 +715,40 @@ ggplot(data_consonant, aes(x = consonant_type, y = bias)) +
   theme_light()+
   stat_compare_means(comparisons = consonant_comparisons, label.y = c(1.1, 1.3, 1.5),
                      label = "p.signif", hide.ns = TRUE)
+```
+
+WJ SCORE ANALYSIS 
+```{r}
+#get one row per participant with one average score (average of all trials)
+data_WJ <- all_data_df %>% group_by(ID,Age,Range,WJ_score) %>%
+  summarise(bias = mean(correct))
+
+#all_data_df %>% filter(ID == "bkp025") need to check about the number of trials each participant got
+
+ggplot(data_WJ,aes(x = WJ_score, y = bias, color = Age))+
+  geom_point()+
+  geom_smooth(se = FALSE, method = "glm", formula = "y ~ poly(x,2)")+
+  scale_color_viridis()+
+  theme_classic()
+
+cor.test(data_WJ$WJ_score, data_WJ$bias)
+#there is a significant correlation between bias and WJ score
+```
+
+
+random effects???
+
+```{r}
+library(lme4)
+```
+
+```{r}
+# the (1|...) means Age is being included in the model as a random effect. This evens it out to see if the WJ-Bias correlation is still significant with Age taken into account. 
+#still need to add in ages of all adults
+bias_WJ_glmm <- lmer(bias ~ WJ_score + (1|Age), data = data_WJ)
+
+Anova(bias_WJ_glmm)
+summary(bias_WJ_glmm)
+
 ```
 
