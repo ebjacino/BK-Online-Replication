@@ -12,6 +12,7 @@ library(car)        # for Anova()
 library(readxl)
 library("writexl")
 library(viridis)
+library(ppcor) #for partial correlation
 
 ```
 Colors
@@ -656,7 +657,7 @@ all_data_df_c <- all_data_df %>% mutate(round_shape_choice = ifelse(grepl("bouba
 
 make consonant graph
 
-```{r}
+
 consonant_graph_df <- all_data_df_c %>% group_by(ID,consonant_type) %>% 
                                       summarise(bias = sum(sharp_shape_choice)/n()) %>% 
                                       #mutate(bias = ifelse(sound == "angular",-1*bias,bias)) %>%
@@ -692,9 +693,9 @@ consonant_graph <- ggplot(data_consonant_type, aes(x = consonant_type, y = bias)
 consonant_graph
 
 #ggsave("graphs/presentation graphs/consonant_type.png", width = 5, height = 3)
-```
+
 ANALYSIS FOR CONSONANT TYPE
-```{r}
+
 m_c <- glm(sharp_shape_choice ~ consonant_type, data = all_data_df_c)
 
 Anova(m_c)
@@ -706,7 +707,7 @@ bko2_consonant_table <-contrast(emmeans(m_c, ~ consonant_type) , method = "pairw
 write.csv(bko2_consonant_table, "significance tables/bko2_consonant_table.csv")
 ```
 
-```{r}
+
 ggplot(data_consonant, aes(x = consonant_type, y = bias)) +
   geom_boxplot() +
   #  facet_wrap(~ group) +
@@ -727,9 +728,18 @@ data_WJ <- all_data_df %>% group_by(ID,Age,Range,WJ_score) %>%
 
 ggplot(data_WJ,aes(x = WJ_score, y = bias, color = Age))+
   geom_point()+
-  geom_smooth(se = FALSE, method = "glm", formula = "y ~ poly(x,2)")+
+  #geom_smooth(se = FALSE, method = "glm", formula = "y ~ poly(x,2)")+
+  geom_smooth(se = FALSE, method = "glm")+
   scale_color_viridis()+
   theme_classic()
+
+#binned by range?
+ggplot(data_WJ,aes(x = WJ_score, y = bias, color = Age))+
+  geom_point()+
+  geom_smooth(se = FALSE, method = "glm")+
+  scale_color_viridis()+
+  theme_classic()+
+  facet_wrap("Range")
 
 cor.test(data_WJ$WJ_score, data_WJ$bias)
 #there is a significant correlation between bias and WJ score
@@ -742,13 +752,90 @@ random effects???
 library(lme4)
 ```
 
+Partial correlation tells you if it's still significant controlling for that third variable, then you should include it in the model. partial correlation is the overlap between IV and DV circles- how much it explains the variance. if there is a significant effect controlling for age, you should include age in the regression analysis. 
+Might also want to do semi partial- it excludes the overlap with the outcome variability due to age. 
+check with how Rsquared is interpreted
+
 ```{r}
 # the (1|...) means Age is being included in the model as a random effect. This evens it out to see if the WJ-Bias correlation is still significant with Age taken into account. 
 #still need to add in ages of all adults
 bias_WJ_glmm <- lmer(bias ~ WJ_score + (1|Age), data = data_WJ)
-
 Anova(bias_WJ_glmm)
 summary(bias_WJ_glmm)
 
+#fixed effect model
+bias_WJ_glmm_fixed <- glm(bias ~ WJ_score + Age, data = data_WJ)
+
+Anova(bias_WJ_glmm_fixed)
+summary(bias_WJ_glmm_fixed)
+
+#comparing models?
+ICtab(bias_WJ_glmm,bias_WJ_glmm_fixed)
+
+#partial correlation? 
+
+#library(ppcor)
+spcor.test(data_WJ$WJ_score,data_WJ$bias,data_WJ$Age,method="pearson")
+
+```
+
+
+```{r}
+#try this binned by age, for each age range
+#get one row per participant with one average score (average of all trials) for 6-8 year olds only
+data_WJ_6to8 <- all_data_df %>% group_by(ID,Age,Range,WJ_score) %>%
+              filter(Range == "6 to 8") %>%
+              summarise(bias = mean(correct))
+
+#fixed effect model
+bias_WJ_glmm_fixed_6to8 <- glm(bias ~ WJ_score + Age, data = data_WJ_6to8)
+
+Anova(bias_WJ_glmm_fixed_6to8)
+summary(bias_WJ_glmm_fixed_6to8)
+
+#regular correlation
+cor.test(data_WJ_6to8$WJ_score,data_WJ_6to8$bias,method="pearson")
+
+#partial correlation? 
+#library(ppcor)
+pcor.test(data_WJ_6to8$WJ_score,data_WJ_6to8$bias,data_WJ_6to8$Age,method="pearson")
+
+#########################9 to 11####
+#get one row per participant with one average score (average of all trials) for 6-8 year olds only
+data_WJ_9to11 <- all_data_df %>% group_by(ID,Age,Range,WJ_score) %>%
+              filter(Range == "9 to 11") %>%
+              summarise(bias = mean(correct))
+
+#fixed effect model
+bias_WJ_glmm_fixed_9to11 <- glm(bias ~ WJ_score + Age, data = data_WJ_9to11)
+
+Anova(bias_WJ_glmm_fixed_9to11)
+summary(bias_WJ_glmm_fixed_9to11)
+
+#regular correlation
+cor.test(data_WJ_9to11$WJ_score,data_WJ_9to11$bias,method="pearson")
+
+#partial correlation? 
+#library(ppcor)
+pcor.test(data_WJ_9to11$WJ_score,data_WJ_9to11$bias,data_WJ_9to11$Age,method="pearson")
+
+#########################adult####
+#get one row per participant with one average score (average of all trials) for 6-8 year olds only
+data_WJ_adult <- all_data_df %>% group_by(ID,Age,Range,WJ_score) %>%
+              filter(Range == "Adult") %>%
+              summarise(bias = mean(correct))
+
+#fixed effect model
+bias_WJ_glmm_fixed_adult <- glm(bias ~ WJ_score + Age, data = data_WJ_adult)
+
+Anova(bias_WJ_glmm_fixed_adult)
+summary(bias_WJ_glmm_fixed_adult)
+
+#regular correlation
+cor.test(data_WJ_adult$WJ_score,data_WJ_adult$bias,method="pearson")
+
+#partial correlation? 
+#library(ppcor)
+pcor.test(data_WJ_adult$WJ_score,data_WJ_adult$bias,data_WJ_adult$Age,method="pearson")
 ```
 
