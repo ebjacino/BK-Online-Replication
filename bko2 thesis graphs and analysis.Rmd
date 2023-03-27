@@ -775,10 +775,12 @@ ICtab(bias_WJ_glmm,bias_WJ_glmm_fixed)
 #partial correlation? 
 
 #library(ppcor)
+pcor.test(data_WJ$WJ_score,data_WJ$bias,data_WJ$Age,method="pearson")
+
 spcor.test(data_WJ$WJ_score,data_WJ$bias,data_WJ$Age,method="pearson")
 
 ```
-
+looking at each age range individually
 
 ```{r}
 #try this binned by age, for each age range
@@ -795,6 +797,9 @@ summary(bias_WJ_glmm_fixed_6to8)
 
 #regular correlation
 cor.test(data_WJ_6to8$WJ_score,data_WJ_6to8$bias,method="pearson")
+#partial and semipartial controlling for age
+pcor.test(data_WJ_6to8$WJ_score,data_WJ_6to8$bias,data_WJ_6to8$Age,method="pearson")
+
 
 #partial correlation? 
 #library(ppcor)
@@ -814,6 +819,9 @@ summary(bias_WJ_glmm_fixed_9to11)
 
 #regular correlation
 cor.test(data_WJ_9to11$WJ_score,data_WJ_9to11$bias,method="pearson")
+#partial correlation controlling for age
+pcor.test(data_WJ_9to11$WJ_score,data_WJ_9to11$bias,data_WJ_9to11$Age,method="pearson")
+
 
 #partial correlation? 
 #library(ppcor)
@@ -833,9 +841,35 @@ summary(bias_WJ_glmm_fixed_adult)
 
 #regular correlation
 cor.test(data_WJ_adult$WJ_score,data_WJ_adult$bias,method="pearson")
-
-#partial correlation? 
-#library(ppcor)
+#partial correlation controlling for age
 pcor.test(data_WJ_adult$WJ_score,data_WJ_adult$bias,data_WJ_adult$Age,method="pearson")
+
+
 ```
+look at only in kids (filter out adults)
+```{r}
+#########################kids only####
+#get one row per participant with one average score (average of all trials) for all kids
+data_WJ_kids <- all_data_df %>% group_by(ID,Age,Range,WJ_score) %>%
+              filter(!(Range == "Adult")) %>%
+              summarise(bias = mean(correct))
+
+#fixed effect model
+bias_WJ_glmm_fixed_kids <- glm(bias ~ WJ_score + Age, data = data_WJ_kids)
+
+Anova(bias_WJ_glmm_fixed_kids)
+summary(bias_WJ_glmm_fixed_kids)
+
+#regular correlation
+cor.test(data_WJ_kids$WJ_score,data_WJ_kids$bias,method="pearson")
+#partial correlation controlling for age
+pcor.test(data_WJ_kids$WJ_score,data_WJ_kids$bias,data_WJ_kids$Age,method="pearson")
+
+
+#semi partial correlation? 
+#library(ppcor)
+spcor.test(data_WJ_kids$WJ_score,data_WJ_kids$bias,data_WJ_kids$Age,method="pearson")
+```
+
+
 
