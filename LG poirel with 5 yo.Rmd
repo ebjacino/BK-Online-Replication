@@ -76,7 +76,7 @@ for(file in rds_files){
   ##Ben Code ***creating tidy data and choice bias score***
   
   #First remove unneeded columns
-  data_cols <- df %>% select(c(trial_type,stimulus,response,left_image,right_image,correct_response,correct)) 
+  data_cols <- df %>% dplyr::select(c(trial_type,stimulus,response,left_image,right_image,correct_response,correct)) 
   
   #Then Filter practice and experimental trials
   data_prac <- data_cols %>% filter(grepl("Prac", stimulus, fixed = TRUE))
@@ -88,7 +88,7 @@ for(file in rds_files){
   data_exp_bk <-data_exp %>% filter(trial_type == "bouba-kiki")
   #filter out the LG data
   data_exp_lg <-data_exp %>% filter(trial_type =="image-keyboard-response") %>%
-    select(c(trial_type, stimulus, response))
+    dplyr::select(c(trial_type, stimulus, response))
   
   #Now write a function to find if the left or the right image is "correct"
   
@@ -113,7 +113,7 @@ for(file in rds_files){
                                 mutate(trial_num = row_number()) %>% 
                                 ungroup() %>%
                                 pivot_wider(names_from = type, values_from = c(image_ID,response)) %>%
-                                select(!c(trial_type,response_targets))
+                                dplyr::select(!c(trial_type,response_targets))
 
   
   
@@ -199,6 +199,7 @@ LG_data_df_combined_bias <- LG_data_df_combined %>% mutate(choice = ifelse(respo
 LG_data_df_combined_bias <- LG_data_df_combined_bias %>% filter(!is.na(choice))
 LG_data_df_combined_bias <- LG_data_df_combined_bias %>% mutate(choice_number = ifelse(choice == "global", 1, 0)) %>%
                             filter(!is.na(choice))
+#write.csv(LG_data_df_combined_bias, "significance tables/full data set.csv")
 ```
 
 new calculation: sum(global)-sum(local)
