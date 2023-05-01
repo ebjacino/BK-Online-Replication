@@ -1,7 +1,7 @@
 library(dplyr)
 
 
-all_files <- list.files("bko2_CSVs")
+all_files <- list.files("bko2 full paradigm CSVs")
 first_file <- TRUE
 
 #Adds ID code onto each trial, binds all individual csvs into one large dataframe
@@ -9,12 +9,12 @@ for(i in 1:length(all_files)){
   if(grepl("b",all_files[i])){
     print(all_files[i])
     if(first_file){
-      all_data_df <- read.csv(paste0("bko2_CSVs/",all_files[i]))
+      all_data_df <- read.csv(paste0("bko2 full paradigm CSVs/",all_files[i]))
       all_data_df <- all_data_df %>% mutate(ID = substr(all_files[i],1,6))
       first_file <- FALSE
     }
     else{
-      new_data_df <- read.csv(paste0("bko2_CSVs/",all_files[i]))
+      new_data_df <- read.csv(paste0("bko2 full paradigm CSVs/",all_files[i]))
       new_data_df <- new_data_df %>% mutate(ID = substr(all_files[i],1,6))
       all_data_df <- rbind(all_data_df,new_data_df)
     }
@@ -240,10 +240,11 @@ Anova(mi_v_c_vt)
 em <- emmeans(mi_c_vt, ~  congruent * vowel_type, method = "pairwise", type = "response", adjsut = "mvt")
 pairs(em)
 emmeans_model <- as.tibble(pairs(em)) 
-write.csv(emmeans_model, "significance tables/emmeans model")
+#write.csv(emmeans_model, "significance tables/emmeans model")
 
 
 ma_v_c_vt <- glm(bias ~ 0 + voicing + congruent + vowel_type, data = data_all_biases)
+summary(ma_v_c_vt)
 
 model_comparisons <- list( c("/a/, congruent", "/i/, incongruent"),
                         c("/a/, incongruent", "/i/, congruent"))

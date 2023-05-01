@@ -1,9 +1,8 @@
 First we create the graph of all the 16 stimuli
-
-
 ```{r}
 library(tidyverse)
 library(ggplot2)
+library(lme4)
 library(ggpubr)
 library(forcats)
 library(emmeans)
@@ -13,13 +12,18 @@ library(readxl)
 library("writexl")
 library(viridis)
 library(ppcor) #for partial correlation
+library(lpSolve)
+library(irr) #for inter-rater reliability
 
 ```
-Colors
+#Colors
 ```{r}
 angular_color = "#E01A4F"
 curved_color = "#FFC05C"
 third_color = "#80B8EF"
+congruent_color = "#38686A"
+#incongruent_color = "#791E94"
+incongruent_color = "#9046CF"
 ```
 
 ```{r}
@@ -210,7 +214,7 @@ for(file in rds_files){
 
 ```
 
-
+Make them into one big data frame
 ```{r}
 all_files <- list.files("bko2 full paradigm CSVs")
 first_file <- TRUE
@@ -272,35 +276,6 @@ data_voicing = all_data_df %>% group_by(voicing, ID,Range) %>%
 
 data_consonant = all_data_df %>% group_by(consonant_type, ID,Range) %>%
   summarise(bias = sum(correct)/n())
-
-
-```
-
-```{r}
-#listing comparisons for significance bars
-#bias for orthography
-orth_comparisons <- list( c("6 to 8", "9 to 11", "Adult"))
-
-#bias for vowel type
-vowel_comparisions <- list( c("/a/", "/i/"))
-
-#bias for congruency
-congruency_comparisions <- list( c("congruent", "incongruent"))
-
-#bias for voicing
-voicing_comparisions <- list( c("unvoiced", "voiced"))
-
-#bias for consonant type
-consonant_comparisons <- list( c("stop", "fricative"),
-                        c("fricative", "sonorant"),
-                        c("stop", "sonorant"))
-
-```
-
-
-```{r}
-#all_data_df <- read.csv("all_data_df.csv")
-#this csv file has lala and lili as angular 
 ```
 
 ```{r}
@@ -326,7 +301,7 @@ stimulus_bias_data_points <- all_data_df %>% mutate(stimulus = toupper(sub(".wav
                                       summarise(Count = n())
 ```
 
-##ALL STIM GRAPH
+#ALL STIM GRAPH
 
 ```{r}
 
@@ -351,8 +326,9 @@ new_color_all_stim
 ANALYSIS WITH BONFERONNI CORRECTION 
 ```{r}
 #stimulus:Range gets you the interaction term, which is the difference from 0 for each stimulus for each age range
-stim_m <- glm(correct ~ 0 + stimulus:Range, data = all_data_df, family = binomial)
-summary(stim_m)#$coefficients[,4]
+#the nAGQ = 0 is a bit mysterious, might be too many people at 100% correct that makes the model fail to converge but this makes it work
+stim_m <- glmer(correct ~ 0 + stimulus:Range + (1 | ID), data = all_data_df, family = binomial, nAGQ = 0)
+summary(stim_m)
 
 stimulus_bias_data_ben <- all_data_df %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
                                       group_by(ID,stimulus,sound,Range) %>% 
@@ -385,7 +361,8 @@ orth_new <- all_data_df %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/"
                                       group_by(sound,Range) %>%
                                       summarize(mean_bias = mean(bias),
                                                 sd_bias = sd(bias),
-                                                se_bias=sd_bias/sqrt(n())) 
+                                                se_bias=sd_bias/sqrt(n()),
+                                                N=n()) 
 
 orth_new_points <- all_data_df %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
                                       group_by(ID,sound,Range) %>% 
@@ -404,13 +381,13 @@ new_orthography <- ggplot(data_orth, aes(x = sound, y = bias)) +
   geom_errorbar(orth_new, mapping = aes(x = sound, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
 #stat_compare_means(comparisons = orth_comparisons, label.y = c(1),
                     #label = "p.signif", hide.ns = FALSE) +
-  theme_classic() +
+  theme_light() +
   ylim(-.5, .5) +
   scale_fill_manual(values = c(angular_color,curved_color)) +
   scale_color_manual(values = c(angular_color,curved_color)) +
   scale_size_continuous(breaks = c(5, 10, 15)) +
-  ylab("Choice Bias") +
-  xlab("Sound") +
+  ylab("Relative choice bias in expected direction") +
+  xlab("Pseudoword Orthography") +
   facet_wrap("Range")
 
 new_orthography
@@ -423,21 +400,17 @@ How to tell if the bars as graphed are different form each other- is the opposit
 
 ```
 
-
-
 how to tell if the age groups are different from each other
 
 ```{r}
 #by range
-m_range <- glm(bias ~ Range, data = data_orth)
-m_sound <- glm(bias ~ sound, data = data_orth)
 m_mult <- glm(bias ~ Range*sound, data = data_orth)
 m_add <- glm(bias ~ Range+sound, data = data_orth)
 #trying to find the model that best fits the data with the least number of terms. not over or under fit to the data. 
 #IC tab multiplies the residuals by the number of terms, higher number is worse
-ICtab(m_range,m_sound,m_mult, m_add)
+ICtab(m_mult, m_add)
 
-Anova(m_mult)
+Anova(m_add)
 
 contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
 bko1_range_difference_table <-contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
@@ -445,27 +418,21 @@ bko1_range_difference_table <-contrast(emmeans(m_mult, ~ Range | sound) , method
 
 ```
 
-##orthography IS THERE A SIGNIFICANT DIFFERENCE FROM 0?
+#orthography IS THERE A SIGNIFICANT DIFFERENCE FROM 0?
  you want to see if every group is different from zero, and so you want a model that just looks at the smallest groups (each sound for each age group), with none of the big groupings. that’s why you just look at the interaction, not sound*range. This is doing those 6 individual t tests, and correcting for the number of t tests at the same time. 
 ```{r}
 #sound:Range gets you the interaction term, which is the difference from 0 for each stimulus for each age range
-#need to center this around 0 instead of .5 
-orth_trans <- all_data_df %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
-                                      group_by(ID,sound,Range) %>% 
-                                      summarise(bias = sum(correct)/n()- 0.5)
-
-stim_o <- glm(bias ~ 0 + sound:Range, data = orth_trans)
+#real_binom <- glmer(correct ~ 0 + Range:consonant_type + (1|ID), data = all_data_df_c, family = "binomial") 
+stim_o <- glmer(correct ~ 0 + sound:Range + (1|ID), data = all_data_df, family = binomial)
 summary(stim_o)
 
 ```
 
-CONGRUENCY GRAPH
-
+#CONGRUENCY GRAPH
 ```{r}
+#need to make these different colors
 congruency_new <- all_data_df %>% group_by(congruent, ID,Range) %>% 
                                       summarise(bias = sum(correct)/n()) %>% 
-                                      #mutate(bias = ifelse(congruent == "incongruent",-1*bias,bias)) %>%
-                                      #ungroup()%>%
                                       group_by(congruent,Range) %>%
                                       summarize(mean_bias = mean(bias),
                                                 sd_bias = sd(bias),
@@ -486,15 +453,13 @@ congruency_plot_new <- ggplot(data_congruency, aes(x = congruent, y = bias)) +
   geom_col(congruency_new, mapping = aes(x = congruent, y = mean_bias, fill = congruent), alpha = 0.5) +
   geom_point(congruency_new, mapping = aes(x = congruent, y = mean_bias)) +
   geom_errorbar(congruency_new, mapping = aes(x = congruent, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
-  #stat_compare_means(comparisons = congruency_comparisions, label.y = c(1.2),
-                    #label = "p.signif", hide.ns = TRUE) +
-  scale_fill_manual(values = c(angular_color,curved_color)) +
-  scale_color_manual(values = c(angular_color,curved_color)) +
-  theme_classic() +
+  scale_fill_manual(values = c(congruent_color,incongruent_color)) +
+  scale_color_manual(values = c(congruent_color,incongruent_color)) +
+  theme_light() +
   ylim(0,1) +
-  ylab("Choice Bias") +
+  ylab("Choice bias in expected direction") +
   scale_y_continuous(limits = c(0, 1), breaks = c(0.00, 0.25, 0.50, 0.75, 1)) +
-  xlab("Congruency") +
+  xlab("Pseudoword congruency") +
   facet_wrap("Range")
 
 congruency_plot_new
@@ -505,13 +470,11 @@ how to tell if the age groups are different from each other
 
 ```{r}
 #by range. is there a difference between bias for congruent/incongruent words for different age ranges?
-m_range_c <- glm(bias ~ Range, data = data_congruency)
-m_sound_c <- glm(bias ~ congruent, data = data_congruency)
 m_mult_c <- glm(bias ~ Range*congruent, data = data_congruency)
 m_add_c <- glm(bias ~ Range+congruent, data = data_congruency)
 #trying to find the model that best fits the data with the least number of terms. not over or under fit to the data. 
 #IC tab multiplies the residuals by the number of terms, higher number is worse
-ICtab(m_range_c,m_sound_c,m_mult_c, m_add_c)
+ICtab(m_mult_c, m_add_c)
 
 Anova(m_add_c)
 
@@ -521,10 +484,9 @@ contrast(emmeans(m_add_c, ~ Range | congruent) , method = "pairwise", type = "re
 analysis
 how to tell if there is a difference between congruent and incongruent for each age group
 ```{r}
-congruency_a <- glm(bias ~congruent+Range, data = data_congruency)
-congruency_m <- glm(bias ~congruent*Range, data = data_congruency)
 #model of only the interaction term
-congruency_i <- glm(bias ~congruent:Range, data = data_congruency)
+congruency_i <- glmer(correct ~ congruent:Range + (1|ID), data = all_data_df, family =binomial)
+summary(congruency_i)
 
 Anova(congruency_i)
 
@@ -533,46 +495,36 @@ contrast(emmeans(congruency_i, ~ congruent | Range) , method = "pairwise", type 
 
 ```
 
-##GRAPH FOR VOWEL TYPE
+#GRAPH FOR VOWEL TYPE
 ```{r}
-#all_data_df_c is for sharp shape choice bias- proportion of times they chose the sharp shape
-
-all_data_df_c <- all_data_df %>% mutate(round_shape_choice = ifelse(grepl("bouba",left_image)  & response == left_key,
-                                                         1,
-                                                         ifelse(grepl("bouba",right_image)  & response == right_key, 1,
-                                                         0))) %>% 
-  mutate(sharp_shape_choice = ifelse(grepl("kiki",left_image)  & response == left_key,
-                                                         1,
-                                                         ifelse(grepl("kiki",right_image)  & response == right_key, 1,
-                                                         0)))
 #
-data_vowel_type = all_data_df_c %>% group_by(vowel_type, ID,Range) %>%
-  summarise(bias = sum(sharp_shape_choice)/n())
+data_vowel_type <- all_data_df %>% group_by(vowel_type, ID,Range) %>%
+  summarise(bias = sum(correct)/n()-.5)
 
 vowel_type_mean <- data_vowel_type %>%  group_by(vowel_type,Range) %>%
                                       summarize(mean_bias = mean(bias),
                                                 sd_bias = sd(bias),
                                                 se_bias=sd_bias/sqrt(n())) 
 
-vowel_points <- data_vowel_type %>% group_by(vowel_type, Range)
+vowel_points <- data_vowel_type %>% group_by(vowel_type, Range) %>%
                                       mutate(bias_round = round_any(bias,0.25)) %>%
                                       group_by(vowel_type,bias_round) %>%
                                       summarise(Count = n())
 #graph
 vowel_plot <- ggplot(data_vowel_type, aes(x = vowel_type, y = bias)) +
   geom_col(vowel_type_mean, mapping = aes(x = vowel_type, y = mean_bias), color = "black", fill = NA) +
-  #geom_point(vowel_points, mapping = aes(x = vowel_type, y = bias_round, size = Count, color = vowel_type)) +
-  geom_jitter(data_vowel_type, mapping = aes(x = vowel_type, y = bias))+
+  geom_point(vowel_points, mapping = aes(x = vowel_type, y = bias_round, size = Count, color = vowel_type)) +
+  #geom_jitter(data_vowel_type, mapping = aes(x = vowel_type, y = bias))+
 
   geom_col(vowel_type_mean, mapping = aes(x = vowel_type, y = mean_bias, fill = vowel_type), alpha = 0.5) +
   geom_point(vowel_type_mean, mapping = aes(x = vowel_type, y = mean_bias)) +
   geom_errorbar(vowel_type_mean, mapping = aes(x = vowel_type, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
   theme_classic() +
-  ylim(0,1) +
+  ylim(-.5,.5) +
   scale_fill_manual(values = c(curved_color,angular_color)) +
   scale_color_manual(values = c(curved_color,angular_color)) +
   scale_size_continuous(breaks = c(5, 10, 15)) +
-  ylab("proportion of spiky choices") +
+  ylab("Choice bias in expected direction") +
   xlab("Vowel type") +
   facet_wrap("Range")
 
@@ -583,7 +535,6 @@ vowel_plot
 ##ANALYSIS FOR VOWEL TYPE
 ```{r}
 #by range. is there a difference between bias for vowel  for different age ranges?
-
 m_mult_co <- glm(bias ~ Range*vowel_type, data = data_vowel_type)
 m_add_co <- glm(bias ~ Range+vowel_type, data = data_vowel_type)
 #trying to find the model that best fits the data with the least number of terms. not over or under fit to the data. 
@@ -595,29 +546,28 @@ Anova(m_add_co)
 contrast(emmeans(m_add_co, ~ Range | vowel_type) , method = "pairwise", type = "response")
 
 ###########difference between each other for 9 to 11 and adults?
-stim_v <- glm(bias ~ 0 + vowel_type:Range, data = data_vowel_type, family = binomial) #binomial makes them all nonsignificant
+stim_v <- glmer(correct ~ 0 + vowel_type:Range + (1|ID), data = all_data_df, family = binomial) 
 summary(stim_v)
 
 ```
-## GRAPH FOR CONSONANT VOICING
+# GRAPH FOR CONSONANT VOICING
 ```{r}
-#there is no difference in the strength of choice bias elicited by each type of consonant voicing, so let's display this as the proportion of sharp choices. using all_data_df_c which is defined further down
-
-data_consonant_type = all_data_df_c %>% group_by(consonant_type, ID,Range) %>%
-  summarise(bias = sum(sharp_shape_choice)/n())
+#
+data_voicing = all_data_df %>% group_by(voicing, ID,Range) %>%
+  summarise(bias = sum(correct)/n())
 
 voicing_mean <- all_data_df %>%  group_by(voicing,ID,Range) %>% 
-                                      summarise(bias = sum(correct)/n()) %>% 
-                                      #mutate(bias = ifelse(voicing == "/i/",-1*bias,bias)) %>%
-                                      group_by(voicing) %>%
+                                      summarise(bias = sum(correct)/n()-.5) %>% 
+                                      mutate(bias = ifelse(voicing == "unvoiced",-1*bias,bias)) %>%
+                                      group_by(voicing,Range) %>%
                                       summarize(mean_bias = mean(bias),
                                                 sd_bias = sd(bias),
                                                 se_bias=sd_bias/sqrt(n())) 
 
 voicing_points <- all_data_df %>% group_by(voicing,ID,Range) %>% 
-                                      summarise(bias = sum(correct)/n()) %>% 
+                                      summarise(bias = sum(correct)/n()-.5) %>% 
+                                        mutate(bias = ifelse(voicing == "unvoiced",-1*bias,bias)) %>%
                                       ungroup() %>%
-                                      #mutate(bias = ifelse(voicing == "/i/",-1*bias,bias)) %>%
                                       mutate(bias_round = round_any(bias,0.25)) %>%
                                       group_by(voicing,bias_round) %>%
                                       summarise(Count = n())
@@ -628,10 +578,8 @@ voicing_plot <- ggplot(data_voicing, aes(x = voicing, y = bias)) +
   geom_col(voicing_mean, mapping = aes(x = voicing, y = mean_bias, fill = voicing), alpha = 0.5) +
   geom_point(voicing_mean, mapping = aes(x = voicing, y = mean_bias)) +
   geom_errorbar(voicing_mean, mapping = aes(x = voicing, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
-  #stat_compare_means(comparisons = voicing_comparisions, label.y = c(1.2),
-                    #label = "p.signif", hide.ns = TRUE) +
-  theme_classic() +
-  ylim(0, 1.5) +
+  theme_light() +
+  ylim(-.5,.5) +
   scale_fill_manual(values = c(curved_color,angular_color)) +
   scale_color_manual(values = c(curved_color,angular_color)) +
   scale_size_continuous(breaks = c(5, 10, 15)) +
@@ -643,85 +591,28 @@ voicing_plot
 
 #ggsave("graphs/presentation graphs/voicing plot.png", height = 3.5, width = 3.5)
 ```
-##ANALYSIS FOR CONSONANT VOICING
+#ANALYSIS FOR CONSONANT VOICING
 ```{r}
+#by range. is there a difference between bias for vowel  for different age ranges?
+m_mult_cv <- glm(bias ~ Range*voicing, data = data_voicing)
+m_add_cv <- glm(bias ~ Range+voicing, data = data_voicing)
+#trying to find the model that best fits the data with the least number of terms. not over or under fit to the data. 
+#IC tab multiplies the residuals by the number of terms, higher number is worse
+ICtab(m_mult_cv, m_add_cv)
 
+Anova(m_add_cv)
+
+contrast(emmeans(m_add_cv, ~ Range | voicing) , method = "pairwise", type = "response")
 
 ```
-consonant type
 
-```{r}
-#bias for consonant type
-consonant_comparisons <- list( c("stop", "fricative"),
-                        c("fricative", "sonorant"),
-                        c("stop", "sonorant"))
-                        
+#consonant graph 
+for one is in the style of Bottini et al 2019 with the proportion of spiky shapes, see previous version, bko2 thesis graphs and analysis
 
-ggplot(data_consonant, aes(x = consonant_type, y = bias)) +
-  geom_boxplot() +
-  #  facet_wrap(~ group) +
-  stat_summary(fun.y=mean, geom="point", shape=20, size=5, color="black", fill="black") +
-  ylim(0,2) +
-  theme_light()+
-  facet_wrap("Range")
-  #stat_compare_means(comparisons = consonant_comparisons, label.y = c(1.1, 1.3, 1.5),
-                     #label = "p.signif", hide.ns = TRUE)
-```
-
-I need to know: how often was a round shape chosen when given each of the 3 consonant types?
-first add column to all_data_df
-
-```{r}
-all_data_df_c <- all_data_df %>% mutate(round_shape_choice = ifelse(grepl("bouba",left_image)  & response == left_key,
-                                                         1,
-                                                         ifelse(grepl("bouba",right_image)  & response == right_key, 1,
-                                                         0))) %>% 
-  mutate(sharp_shape_choice = ifelse(grepl("kiki",left_image)  & response == left_key,
-                                                         1,
-                                                         ifelse(grepl("kiki",right_image)  & response == right_key, 1,
-                                                         0)))
-data_consonant_type = all_data_df_c %>% group_by(consonant_type, ID,Range) %>%
-  summarise(bias = sum(sharp_shape_choice)/n()-0.5)
-```
-
-#consonant graph- this one is in the style of Bottini et al 2019 with the proportion of spiky shapes
-
-```{r}
-consonant_graph_df <- data_consonant_type %>% group_by(consonant_type,Range) %>%
-                                      summarize(mean_bias = mean(bias),
-                                                sd_bias = sd(bias),
-                                                se_bias=sd_bias/sqrt(n()), 
-                                                N = n()) 
-
-consonant_graph_points <- data_consonant_type %>% mutate(bias_round = round_any(bias,0.25)) %>%
-                                      group_by(consonant_type,bias_round) %>%
-                                      summarise(Count = n())
-
-consonant_graph <- ggplot(data_consonant_type, aes(x = consonant_type, y = bias)) +
-  geom_col(consonant_graph_df, mapping = aes(x = consonant_type, y = mean_bias), color = "black", fill = NA) +
-  geom_point(consonant_graph_points, mapping = aes(x = consonant_type, y = bias_round, size = Count, color = consonant_type)) +
-  geom_col(consonant_graph_df, mapping = aes(x = consonant_type, y = mean_bias, fill = consonant_type), alpha = 0.5) +
-  geom_point(consonant_graph_df, mapping = aes(x = consonant_type, y = mean_bias)) +
-  geom_errorbar(consonant_graph_df, mapping = aes(x = consonant_type, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
-  theme_classic() +
-  ylim(0,1) +
-  scale_fill_manual(values = c(angular_color,curved_color,third_color)) +
-  scale_color_manual(values = c(angular_color,curved_color,third_color)) +
-  scale_size_continuous(breaks = c(5, 10, 15)) +
-  #stat_compare_means(comparisons = consonant_comparisons, label.y = c(1.1, 1.3, 1.5),
-                    #label = "p.signif", hide.ns = FALSE) +
-  ylab("Proportion of sharp shape choices") +
-  xlab("consonant type")+
-  facet_wrap("Range")
-
-consonant_graph
-
-#ggsave("graphs/presentation graphs/consonant_type.png", width = 5, height = 3)
-```
 Graph in Vivian's style, with it split at 0
 ```{r}
 #not sure if i should split fricatives (*them by -1)
-data_split_consonant_type = all_data_df_c %>% group_by(consonant_type, ID,Range) %>%
+data_split_consonant_type = all_data_df %>% group_by(consonant_type, ID,Range) %>%
                                       summarise(bias = sum(correct)/n()- 0.5) %>%  
                                       mutate(bias = ifelse(consonant_type == "stop",-1*bias,bias))
 
@@ -735,6 +626,8 @@ consonant_graph_df_split <- data_split_consonant_type %>% group_by(consonant_typ
 consonant_graph_points <- data_split_consonant_type %>% mutate(bias_round = round_any(bias,0.25)) %>%
                                       group_by(consonant_type,bias_round) %>%
                                       summarise(Count = n())
+
+
 #graph
 consonant_graph <- ggplot(data_split_consonant_type, aes(x = consonant_type, y = bias)) +
   geom_col(consonant_graph_df_split, mapping = aes(x = consonant_type, y = mean_bias), color = "black", fill = NA) +
@@ -743,66 +636,32 @@ consonant_graph <- ggplot(data_split_consonant_type, aes(x = consonant_type, y =
   geom_col(consonant_graph_df_split, mapping = aes(x = consonant_type, y = mean_bias, fill = consonant_type), alpha = 0.5) +
   geom_point(consonant_graph_df_split, mapping = aes(x = consonant_type, y = mean_bias)) +
   geom_errorbar(consonant_graph_df_split, mapping = aes(x = consonant_type, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
-  theme_classic() +
+  theme_light() +
   ylim(-.5,.5) +
   scale_fill_manual(values = c(angular_color,curved_color,third_color)) +
   scale_color_manual(values = c(angular_color,curved_color,third_color)) +
   scale_size_continuous(breaks = c(5, 10, 15)) +
   #stat_compare_means(comparisons = consonant_comparisons, label.y = c(1.1, 1.3, 1.5),
                     #label = "p.signif", hide.ns = FALSE) +
-  ylab("bias") +
-  xlab("consonant type")+
+  ylab("Relative bias in expected direction") +
+  xlab("Consonant type")+
   facet_wrap("Range")
 
 consonant_graph
-
-######################################## magnitude only, no transformation except minus .5 and without binomial family
-magnitude_consonant_type = all_data_df_c %>% group_by(consonant_type, ID,Range) %>%
-                                      summarise(bias = sum(correct)/n() -.5)
-#graph this but make it absolute values, not sharp shape choice
-#df for graphing
-consonant_graph_df_mag <- magnitude_consonant_type %>% group_by(consonant_type,Range) %>%
-                                      summarize(mean_bias = mean(bias),
-                                                sd_bias = sd(bias),
-                                                se_bias=sd_bias/sqrt(n()), 
-                                                N = n()) 
-#df for points
-consonant_graph_points_mag <- magnitude_consonant_type %>% mutate(bias_round = round_any(bias,0.25)) %>%
-                                      group_by(consonant_type,bias_round) %>%
-                                      summarise(Count = n())
-#graph
-consonant_graph_m <- ggplot(magnitude_consonant_type, aes(x = consonant_type, y = bias)) +
-  geom_col(consonant_graph_df_mag, mapping = aes(x = consonant_type, y = mean_bias), color = "black", fill = NA) +
-  geom_point(consonant_graph_points_mag, mapping = aes(x = consonant_type, y = bias_round, size = Count, color = consonant_type)) +
-  #geom_jitter(magnitude_consonant_type, mapping = aes(x = consonant_type, y = bias))+
-  geom_col(consonant_graph_df_mag, mapping = aes(x = consonant_type, y = mean_bias, fill = consonant_type), alpha = 0.5) +
-  geom_point(consonant_graph_df_mag, mapping = aes(x = consonant_type, y = mean_bias)) +
-  geom_errorbar(consonant_graph_df_mag, mapping = aes(x = consonant_type, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
-  theme_classic() +
-  ylim(-.5,.5) +
-  scale_fill_manual(values = c(angular_color,curved_color,third_color)) +
-  scale_color_manual(values = c(angular_color,curved_color,third_color)) +
-  scale_size_continuous(breaks = c(5, 10, 15)) +
-  ylab("bias") +
-  xlab("consonant type")+
-  facet_wrap("Range")
-
-consonant_graph_m
-
 
 ```
 
 
 #ANALYSIS FOR CONSONANT TYPE
 ```{r}
+magnitude_consonant_type <- all_data_df %>% group_by(ID,Range,consonant_type) %>%
+  summarise(bias = mean(correct))
 #by range. is there a difference between bias for consonant_type  for different age ranges?
-m_range_co <- glm(bias ~ Range, data = magnitude_consonant_type)
-m_sound_co <- glm(bias ~ consonant_type, data = magnitude_consonant_type)
 m_mult_co <- glm(bias ~ Range*consonant_type, data = magnitude_consonant_type)
 m_add_co <- glm(bias ~ Range+consonant_type, data = magnitude_consonant_type)
 #trying to find the model that best fits the data with the least number of terms. not over or under fit to the data. 
 #IC tab multiplies the residuals by the number of terms, higher number is worse
-ICtab(m_range_co,m_sound_co,m_mult_co, m_add_co)
+ICtab(m_mult_co, m_add_co)
 
 Anova(m_add_co)
 
@@ -816,66 +675,13 @@ IS THERE A SIGNIFICANT DIFFERENCE FROM 0?
  you want to see if every group is different from zero, and so you want a model that just looks at the smallest groups (each sound for each age group), with none of the big groupings. that’s why you just look at the interaction, not sound*range. This is doing those 6 individual t tests, and correcting for the number of t tests at the same time. 
 ```{r}
 #consonant_type:Range gets you the interaction term, which is the difference from 0 for each stimulus for each age range
-
-magnitude_consonant_type_05 <- magnitude_consonant_type %>% mutate(bias = bias + 0.5)
-
-stim_c <- glm(bias ~ 0 + consonant_type:Range, data = magnitude_consonant_type)
-summary(stim_c)
-
-stim_c <- glm(bias ~ 0 + consonant_type:Range, data = data_split_consonant_type)
-summary(stim_c)
-
-data_consonant_type = all_data_df_c %>% group_by(consonant_type, ID,Range) %>%
-  summarise(bias = sum(sharp_shape_choice)/n())
-
-data_split_consonant_type = all_data_df_c %>% group_by(consonant_type, ID,Range) %>%
-                                      summarise(bias = sum(correct)/n() - 0.5) %>%  
-                                      mutate(bias = ifelse(consonant_type == "stop",-1*bias,bias))
-
-ggplot()+
-  geom_point(data = data_split_consonant_type %>% filter(Range == "Adult") %>% filter(consonant_type == "stop"),
-             aes(y = bias, x = consonant_type), color = "blue", alpha = 0.25)+
-  geom_point(data = data_consonant_type %>% filter(Range == "Adult") %>% filter(consonant_type == "stop"),
-             aes(y = bias, x = consonant_type), color = "red", alpha = 0.25)+
-  theme_classic()
-
-#                                     Estimate Std. Error z value Pr(>|z|) 
-#consonant_typestop:RangeAdult         0.54406    0.45268   1.202  0.22942
-
-mean(consonant_data_adults_stop$bias)
-sd(consonant_data_adults_stop$bias)/sqrt(length(consonant_data_adults_stop$bias))
-
-#check t tests for adults
-# One-sample t-test
-consonant_data_adults_stop <- data_split_consonant_type %>% filter(Range == "Adult") %>% filter(consonant_type == "stop")
-
-c_adult <- t.test(consonant_data_adults_stop$bias, mu = 0)
-# Printing the results
-c_adult
-
-#check t tests for adults- sonorants
-# One-sample t-test
-consonant_data_adults_son <- data_split_consonant_type %>% filter(Range == "Adult") %>% filter(consonant_type == "sonorant")
-
-c_adult <- t.test(consonant_data_adults_son$bias, mu = 0)
-# Printing the results
-c_adult
-
-#check t tests for adults- fricatives
-# One-sample t-test
-consonant_data_adults_fr <- data_split_consonant_type %>% filter(Range == "Adult") %>% filter(consonant_type == "fricative")
-
-c_adult <- t.test(consonant_data_adults_fr$bias, mu = 0)
-# Printing the results
-c_adult
+#ben mess
+real_binom <- glmer(correct ~ 0 + Range:consonant_type + (1|ID), data = all_data_df, family = "binomial")
+summary(real_binom)
+#plogis(0.3830)
+       
 ```
 
-is there a difference in the predictive power of the consonants and vowels? do they impact the chance the participant will choose spiky or round shape?
-```{r}
-c_vs_v_df <- all_data_df %>% group_by(ID, stimulus, Range, vowel_type, consonant_type)
-
-c_vs_v <- glm(bias ~ vowel_type + consonant_type, data = all_data_df)
-```
 
 #WJ SCORE ANALYSIS 
 ```{r}
@@ -889,15 +695,17 @@ ggplot(data_WJ,aes(x = WJ_score, y = bias, color = Age))+
   geom_point()+
   #geom_smooth(se = FALSE, method = "glm", formula = "y ~ poly(x,2)")+
   geom_smooth(se = FALSE, method = "glm")+
-  scale_color_viridis()+
-  theme_classic()
+  scale_color_viridis_b ()+
+  theme_light()+
+  ylab("Strength of bouba-kiki bias")+
+  xlab("Score on the Woodcock Johnson task")
 
 #binned by range?
 ggplot(data_WJ,aes(x = WJ_score, y = bias, color = Age))+
   geom_point()+
   geom_smooth(se = FALSE, method = "glm")+
-  scale_color_viridis()+
-  theme_classic()+
+  scale_color_viridis_b()+
+  theme_light()+
   facet_wrap("Range")
 
 cor.test(data_WJ$WJ_score, data_WJ$bias)
@@ -1020,6 +828,27 @@ pcor.test(data_WJ_kids$WJ_score,data_WJ_kids$bias,data_WJ_kids$Age,method="pears
 #semi partial correlation? 
 #library(ppcor)
 spcor.test(data_WJ_kids$WJ_score,data_WJ_kids$bias,data_WJ_kids$Age,method="pearson")
+```
+
+#Inter-rater reliability
+```{r}
+# 3 raters, not the same rater for each subject
+#IRR, or ICC? 
+#ICC needs to be two-way, consistency not agreement, single unit
+library("irr")
+
+data("anxiety", package = "irr")
+head(anxiety, 4)
+
+ICC_data <- read_excel("reliability scoring.xlsx")
+icc(
+  ICC_data, model = "twoway", 
+  type = "consistency", unit = "single"
+  )
+
+library(psych)
+#gives a more detailed chart?
+ICC(ICC_data)
 ```
 
 

@@ -1,0 +1,50 @@
+Before anything else, load in your libraries and check your working directory. The working directory is specific to your computer. 
+gender, race (white vs nonwhite?), bilingual, spatial location
+  for choice bias (round shape choice) and WJ
+```{r}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(lme4)
+library(ggpubr)
+library(forcats)
+library(emmeans)
+library(bbmle)      # for ICtab()
+library(car)        # for Anova()
+library(readxl)     #to read excel files
+
+```
+
+
+First step: load in the demographic data frame
+```{r}
+demo_df <- read_excel("master demographics log edited.xlsx")
+#Get rid of any rows with NA in them (blank or incomplete data) in the "Experiment Run" column
+demo_df <- demo_df %>% drop_na("Experiment_Run")
+
+```
+
+The demographics has too much information in it. We only care about BKO2 data, not any of the other participants. Let's use filter() to pick out exactly the participants we need. We can also use select() to choose columns to include or exclude.
+```{r}
+demo_df_bko2 <- demo_df %>% filter(Experiment_Run =="BKO2")
+#filter out some extra participants we don't need. Take out the 2 participants we need to exclude.
+demo_df_bko2 <- demo_df_bko2 %>% mutate(Include_Exclude = ifelse(is.na(Include_Exclude), "Include", "Exclude")) %>%   
+                                filter(Include_Exclude != "Exclude")
+```
+
+Now we have to manipulate the information in the columns to be more useful. I need to use mutate() to change the following:
+
+Now we need to load in the data frame for the bk bias and WJ scores. 
+```{r}
+all_data_df <- read_excel("bko2 all trials df.xlsx")
+```
+
+This dataframe isn't exactly what we need, though. It has lots of trials for each participant. Let's use summarize() to get one number per participant
+```{r}
+
+```
+
+
+
+
+
