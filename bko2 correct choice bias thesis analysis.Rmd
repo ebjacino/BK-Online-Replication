@@ -1,8 +1,13 @@
+Last updated: May 3 2023
+This procedure requires you to have: the RDS files for each participant in bko2, an empty file for the CSVs, and empty file for practice trials. 
+This file creates graphs and does analysis for each main measure in bko2.
+
+
 First we load in the packages
 ```{r}
 library(tidyverse)
 library(ggplot2)
-library(lme4)
+library(lme4)       #for glmer
 library(ggpubr)
 library(forcats)
 library(emmeans)
@@ -15,15 +20,17 @@ library(viridis)
 library(ppcor) #for partial correlation
 library(lpSolve)
 library(irr) #for inter-rater reliability
+library(dplyr)
+library(stringr)
 
 ```
 #Colors
+This assigns HEX codes for all the colors in the graph
 ```{r}
 angular_color = "#E01A4F"
 curved_color = "#FFC05C"
 third_color = "#80B8EF"
 congruent_color = "#56B375"
-#incongruent_color = "#791E94"
 incongruent_color = "#9046CF"
 ```
 
@@ -35,11 +42,6 @@ round_any <- function(x, accuracy, f=round){f(x/ accuracy) * accuracy}
 generate CSVs from RDS
 
 ```{r}
-library(dplyr)
-library(stringr)
-library(tidyverse)
-library(bbmle)      # for ICtab()
-
 
 correct_stim_list = c("sound/DADA.wav" = "bouba",
                       "sound/MAMA.wav" = "bouba",
@@ -120,7 +122,7 @@ for(file in rds_files){
   #df is the raw data, tells you stimulus and responses
   
   
-  ##Ben Code ***creating tidy data and choice bias score***
+  ##creating tidy data and choice bias score***
   
   #First remove unneeded columns
   data_cols <- df %>% dplyr::select(c(trial_type,stimulus,response,left_image,right_image,correct_response,correct)) 
@@ -240,6 +242,7 @@ for(i in 1:length(all_files)){
 #filter out the NAs
 all_data_df <- all_data_df %>% filter(!is.na(correct))
 
+#use unique to check that i have all the files (e.g. 64 particpants for bko2)
 unique(all_data_df$ID)
 left_key = "z"
 right_key = "m"
@@ -259,7 +262,7 @@ all_data_df <- full_join(all_data_df,WJ_scores, by="ID")
 #choice bias calculations
 ```{r}
 #CALCULATE CHOICE BIAS
-#group_by(ID,sound,group) group for when i have both adults and children
+#first create a new column shape_choice that has a 1 if they chose round, 0 if they chose spiky
 all_data_df <- all_data_df %>% mutate(shape_choice = ifelse(grepl("bouba",left_image)  & response == left_key,
                                                          1,
                                                          ifelse(grepl("bouba",right_image)  & response == right_key, 1,
@@ -296,7 +299,7 @@ trial_counts <- all_data_df %>% group_by(ID) %>%
 #[1] 31.48438
 ```
 
-
+Graph for all the stimuli for all age groups individually
 ```{r}
 stimulus_bias_data <- all_data_df %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
                                       group_by(ID,stimulus,sound,Range) %>% 
@@ -342,7 +345,7 @@ new_color_all_stim
 ```
 ANALYSIS WITH BONFERONNI CORRECTION 
 ```{r}
-#stimulus:Range gets you the interaction term, which is the difference from 0 for each stimulus for each age range
+#stimulus:Range gets you the interaction term, which is the difference from 0 for each stimulus for each age range. (1|ID) is adding subject ID in as a random effect.
 #the nAGQ = 0 is a bit mysterious, might be too many people at 100% correct that makes the model fail to converge but this makes it work
 stim_m <- glmer(shape_choice ~ 0 + stimulus:Range + (1 | ID), data = all_data_df, family = binomial, nAGQ = 0)
 summary(stim_m)
@@ -358,7 +361,6 @@ stim_tib <- tibble(categories = row.names(summary(stim_m)$coefficients),
 stim_tib
 
 ```
-
 
 #orthography graph
 ```{r}
@@ -395,15 +397,17 @@ new_orthography <- ggplot(data_orth, aes(x = sound, y = bias)) +
   scale_size_continuous(breaks = c(5, 10, 15)) +
   ylab("Relative choice bias in expected direction") +
   xlab("Pseudoword Orthography") +
-  facet_wrap("Range")
+  facet_wrap("Range")+
+  theme(strip.background =element_rect(fill="white"))+
+  theme(strip.text = element_text(colour = 'black'))
 
 new_orthography
 
-#ggsave("graphs/presentation graphs/sig orthography.png", height = 3.5, width = 3.5)
+#ggsave("graphs/2023 poster/sig orthography.png", height = 3.5, width = 5.5)
 
 ```
-how to tell if the age groups are different from each other
 
+how to tell if the age groups are different from each other with a contrast table
 ```{r}
 #by range. mixed effect binary model
 m_mult <- glmer(shape_choice ~ Range*sound + (1|ID), data = all_data_df, family = "binomial")
@@ -463,10 +467,14 @@ congruency_plot_new <- ggplot(data_congruency, aes(x = congruent, y = bias)) +
   ylab("Proportion of correct choices (accuracy)") +
   #scale_y_continuous(limits = c(0, 1), breaks = c(0.00, 0.25, 0.50, 0.75, 1)) +
   xlab("Pseudoword congruency") +
-  facet_wrap("Range")
+  facet_wrap("Range")+
+  theme(strip.background =element_rect(fill="white"))+
+  theme(strip.text = element_text(colour = 'black'))+
+    theme(axis.text.x = element_text(angle = 30, vjust = .5, hjust=.5))
+
 
 congruency_plot_new
-#ggsave("graphs/presentation graphs/congruency_plot_new.png", height = 3.5, width = 3.5)
+#ggsave("graphs/2023 poster/congruency plot.png", height = 3.5, width = 5.5)
 ```
 analysis
 how to tell if the age groups are different from each other
@@ -586,7 +594,9 @@ voicing_plot <- ggplot(data_voicing, aes(x = voicing, y = bias)) +
   scale_size_continuous(breaks = c(5, 10, 15)) +
   ylab("Choice Bias in expected direction") +
   xlab("Consonant voicing")+
-  facet_wrap("Range")
+  facet_wrap("Range")+
+  theme(strip.background =element_rect(fill="white"))+
+  theme(strip.text = element_text(colour = 'black'))
 
 voicing_plot
 
@@ -613,7 +623,7 @@ summary(cv_binom)
 #consonant graph 
 for one is in the style of Bottini et al 2019 with the proportion of spiky shapes, see previous version, bko2 thesis graphs and analysis
 
-Graph in Vivian's style, with it split at 0
+Graph with it split at 0
 ```{r}
 #
 data_split_consonant_type = all_data_df %>% group_by(consonant_type, ID,Range) %>%
@@ -648,9 +658,14 @@ consonant_graph <- ggplot(data_split_consonant_type, aes(x = consonant_type, y =
                     #label = "p.signif", hide.ns = FALSE) +
   ylab("Relative bias in expected direction") +
   xlab("Consonant type")+
-  facet_wrap("Range")
+  facet_wrap("Range")+ 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))+
+  theme(strip.background =element_rect(fill="white"))+
+  theme(strip.text = element_text(colour = 'black'))
 
 consonant_graph
+ggsave("graphs/2023 poster/consonant.png", height = 3.5, width = 5.5)
+
 
 ```
 
@@ -691,7 +706,6 @@ data_WJ <- all_data_df %>% group_by(ID,Age,Range,WJ_score) %>%
 
 ggplot(data_WJ,aes(x = WJ_score, y = bias, color = Age))+
   geom_point()+
-  #geom_smooth(se = FALSE, method = "glm", formula = "y ~ poly(x,2)")+
   geom_smooth(se = FALSE, method = "glm")+
   scale_color_viridis_b ()+
   theme_light()+

@@ -8,7 +8,6 @@ library(ggplot2)
 library(lme4)
 library(ggpubr)
 library(forcats)
-library(emmeans)
 library(bbmle)      # for ICtab()
 library(car)        # for Anova()
 library(readxl)     #to read excel files
@@ -16,7 +15,7 @@ library(readxl)     #to read excel files
 ```
 
 
-First step: load in the demographic data frame
+First step: load in the demographic data frame. use drop_na() to get rid of NAs in a particular column. In this case we want to get rid of the NAs in Experiment_Run because they were not run in the study.
 ```{r}
 demo_df <- read_excel("master demographics log edited.xlsx")
 #Get rid of any rows with NA in them (blank or incomplete data) in the "Experiment Run" column
@@ -25,26 +24,80 @@ demo_df <- demo_df %>% drop_na("Experiment_Run")
 ```
 
 The demographics has too much information in it. We only care about BKO2 data, not any of the other participants. Let's use filter() to pick out exactly the participants we need. We can also use select() to choose columns to include or exclude.
+the ! is an important part of R syntax. It means everything but. so != "Exclude" means keep in everything BUT where it says "Exclude". 
 ```{r}
 demo_df_bko2 <- demo_df %>% filter(Experiment_Run =="BKO2")
 #filter out some extra participants we don't need. Take out the 2 participants we need to exclude.
 demo_df_bko2 <- demo_df_bko2 %>% mutate(Include_Exclude = ifelse(is.na(Include_Exclude), "Include", "Exclude")) %>%   
-                                filter(Include_Exclude != "Exclude")
+                                filter(Include_Exclude != "Exclude") %>%
+                                mutate(Bilingual = ifelse(Bilingual == "yes",1,0))
 ```
 
-Now we have to manipulate the information in the columns to be more useful. I need to use mutate() to change the following:
 
-Now we need to load in the data frame for the bk bias and WJ scores. 
+Now we need to load in the data frame for the bk bias and WJ scores. join them together will fulljoin, which 
+uses ID to match them up. 
 ```{r}
 all_data_df <- read_excel("bko2 all trials df.xlsx")
+all_data_df <- full_join(all_data_df,demo_df_bko2, by="ID")
 ```
 
 This dataframe isn't exactly what we need, though. It has lots of trials for each participant. Let's use summarize() to get one number per participant
+
+
+Let's do some counting. How many participants in each age range fall into the different demo categories?
 ```{r}
+one_row <- all_data_df %>% group_by(ID,Range,Sex,Bilingual,Race) %>%
+                              summarise(bias = sum(shape_choice)/n()- 0.5)
+
+#sum tables
+sum_table_sex <- one_row %>% group_by(Range) %>% count(Sex)
+sum_table_bilingual <-one_row %>% group_by(Range) %>% count(Bilingual)
+sum_table_race <- one_row %>% group_by(Range) %>% count(Race)
+sum_table_race_simple <- one_row %>% mutate(Race = ifelse(Race == "White", "White", "nonWhite")) %>%
+                          group_by(Range) %>% count(Race)
 
 ```
 
+using glm() to see if sex and bilingualism had any effect on bias score and WJ score
+```{r}
+#sex
+glm_sex <- glmer(shape_choice ~ Sex + (1|ID), data = all_data_df, family = "binomial")
+Anova(glm_sex)
+#bilingualism
+glm_bilingual <- glmer(shape_choice ~ Bilingual + (1|ID), data = all_data_df, family = "binomial")
+Anova(glm_bilingual)
 
+#race
+#for race analysis, change to either "white" or "nonwhite"
+all_data_df_racesimple <- all_data_df %>% mutate(Race = ifelse(Race == "White", "White", "nonWhite"))
 
+glm_race <- glmer(WJ_score ~ Race + (1|ID), data = all_data_df_racesimple, family="poisson")
+Anova(glm_race)
+
+```
+
+Same thing for WJ score. Does sex or bilingualism (maybe check race?) have an impact on WJ score?
+```{r}
+#sex
+glm_sex <- glmer(WJ_score ~ Sex + (1|ID), data = all_data_df, family="poisson")
+Anova(glm_sex)
+
+#bilingualism
+glm_bilingual <- glmer(WJ_score ~ Bilingual + (1|ID), data = all_data_df, family="poisson")
+Anova(glm_bilingual)
+
+#race
+glm_race <- glmer(WJ_score ~ Race + (1|ID), data = all_data_df_racesimple, family="poisson")
+Anova(glm_race)
+```
+Spatial location- does what image is on the left matter? like do they have a preference
+for the repeated trials, when the location is flipped, do they chose the same choice even though the shape location is flipped
+```{r}
+all_data_df_location <- all_data_df %>% mutate(Lround_or_spiky_shape = ifelse(grepl("bouba", left_image), "round", "spiky"))
+
+glm_location <- glmer(shape_choice ~ left_image*Lround_or_spiky_shape + (1|ID), data = all_data_df_location, family="binomial")
+Anova(glm_location)
+
+```
 
 
