@@ -1,6 +1,7 @@
 Before anything else, load in your libraries and check your working directory. The working directory is specific to your computer. 
-gender, race (white vs nonwhite?), bilingual, spatial location
-  for choice bias (round shape choice) and WJ
+you need: master demographics log edited.xlsx
+          bko2 all trials df.xlsx
+
 ```{r}
 library(tidyverse)
 library(dplyr)
@@ -43,12 +44,14 @@ all_data_df <- full_join(all_data_df,demo_df_bko2, by="ID")
 
 This dataframe isn't exactly what we need, though. It has lots of trials for each participant. Let's use summarize() to get one number per participant
 
+```{r}
+#shape_choice is the proportion of times participants choose a round shape. this is our choice bias measure.
+one_row <- all_data_df %>% group_by(ID,Range,Sex,Bilingual,Race) %>%
+                              summarise(bias = sum(shape_choice)/n()- 0.5)
+```
 
 Let's do some counting. How many participants in each age range fall into the different demo categories?
 ```{r}
-one_row <- all_data_df %>% group_by(ID,Range,Sex,Bilingual,Race) %>%
-                              summarise(bias = sum(shape_choice)/n()- 0.5)
-
 #sum tables
 sum_table_sex <- one_row %>% group_by(Range) %>% count(Sex)
 sum_table_bilingual <-one_row %>% group_by(Range) %>% count(Bilingual)
@@ -58,17 +61,21 @@ sum_table_race_simple <- one_row %>% mutate(Race = ifelse(Race == "White", "Whit
 
 ```
 
-using glm() to see if sex and bilingualism had any effect on bias score and WJ score
+using glm() to see if sex and bilingualism had any effect on bias score and WJ score. glm is a generalized linear model, similar to an anova. It's also referred to as just a regression model. The syntax is a bit complicated, but basically you're seeing if variable 2 (sex) has a significant effect on variable 1 (shape_choice). the shape_choice data is binomial (you either choose round or sharp- 2 choices = binomial). 
+Anova runs a type II anova on the model, allowing you to interpret the regression. If the P value for the chi squared test is over .05, it's nonsignificant (which is what we're hoping for here).
 ```{r}
 #sex
 glm_sex <- glmer(shape_choice ~ Sex + (1|ID), data = all_data_df, family = "binomial")
 Anova(glm_sex)
+#p value= 0.8626
+
 #bilingualism
 glm_bilingual <- glmer(shape_choice ~ Bilingual + (1|ID), data = all_data_df, family = "binomial")
 Anova(glm_bilingual)
 
 #race
 #for race analysis, change to either "white" or "nonwhite"
+#syntax: ifelse(column == this, replace it with 1, otherwise replace it with 0)
 all_data_df_racesimple <- all_data_df %>% mutate(Race = ifelse(Race == "White", "White", "nonWhite"))
 
 glm_race <- glmer(WJ_score ~ Race + (1|ID), data = all_data_df_racesimple, family="poisson")
@@ -89,15 +96,7 @@ Anova(glm_bilingual)
 #race
 glm_race <- glmer(WJ_score ~ Race + (1|ID), data = all_data_df_racesimple, family="poisson")
 Anova(glm_race)
-```
-Spatial location- does what image is on the left matter? like do they have a preference
-for the repeated trials, when the location is flipped, do they chose the same choice even though the shape location is flipped
-```{r}
-all_data_df_location <- all_data_df %>% mutate(Lround_or_spiky_shape = ifelse(grepl("bouba", left_image), "round", "spiky"))
-
-glm_location <- glmer(shape_choice ~ left_image*Lround_or_spiky_shape + (1|ID), data = all_data_df_location, family="binomial")
-Anova(glm_location)
-
+#race numbers are not even, so not sure if we will report this, too skewed 
 ```
 
-
+So far we didn't find any demographic measure had a significant effect on shape choice or WJ score. This means we can collapse across these variables and don't have to take them into account for our larder analyses. 
