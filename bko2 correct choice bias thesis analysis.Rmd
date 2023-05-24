@@ -1,4 +1,4 @@
-Last updated: May 3 2023
+Last updated: May 24 2023
 This procedure requires you to have: the RDS files for each participant in bko2, an empty file for the CSVs, and empty file for practice trials. 
 This file creates graphs and does analysis for each main measure in bko2.
 
@@ -39,7 +39,7 @@ incongruent_color = "#9046CF"
 round_any <- function(x, accuracy, f=round){f(x/ accuracy) * accuracy}
 ```
 
-generate CSVs from RDS
+generate CSVs from RDS- only run if you have an empy folder ready for the csv to go 
 
 ```{r}
 
@@ -243,7 +243,7 @@ for(i in 1:length(all_files)){
 all_data_df <- all_data_df %>% filter(!is.na(correct))
 
 #use unique to check that i have all the files (e.g. 64 particpants for bko2)
-unique(all_data_df$ID)
+#unique(all_data_df$ID)
 left_key = "z"
 right_key = "m"
 ```
@@ -423,7 +423,7 @@ bko2_range_difference_table <-contrast(emmeans(m_mult, ~ Range | sound) , method
 ```
 
 #orthography IS THERE A SIGNIFICANT DIFFERENCE FROM 0?
- you want to see if every group is different from zero, and so you want a model that just looks at the smallest groups (each sound for each age group), with none of the big groupings. that’s why you just look at the interaction, not sound*range. This is doing those 6 individual t tests, and correcting for the number of t tests at the same time. 
+ you want to see if every group is different from zero, and so you want a model that just looks at the smallest groups (each sound for each age group), with none of the big groupings. that’s why you just look at the interaction, not sound*range. This is doing those 6 individual t tests
 ```{r}
 #sound:Range gets you the interaction term, which is the difference from 0 for each stimulus for each age range
 stim_o <- glmer(shape_choice ~ 0 + sound:Range + (1|ID), data = all_data_df, family = binomial)
@@ -530,14 +530,16 @@ vowel_plot <- ggplot(data_vowel_type, aes(x = vowel_type, y = bias)) +
   geom_col(vowel_type_mean, mapping = aes(x = vowel_type, y = mean_bias, fill = vowel_type), alpha = 0.5) +
   geom_point(vowel_type_mean, mapping = aes(x = vowel_type, y = mean_bias)) +
   geom_errorbar(vowel_type_mean, mapping = aes(x = vowel_type, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
-  theme_classic() +
+  theme_light() +
   ylim(-.5,.5) +
   scale_fill_manual(values = c(curved_color,angular_color)) +
   scale_color_manual(values = c(curved_color,angular_color)) +
   scale_size_continuous(breaks = c(5, 10, 15)) +
   ylab("Choice bias in expected direction") +
   xlab("Vowel type") +
-  facet_wrap("Range")
+  facet_wrap("Range")+
+  theme(strip.background =element_rect(fill="white"))+
+  theme(strip.text = element_text(colour = 'black'))
 
 vowel_plot
 
@@ -595,6 +597,8 @@ voicing_plot <- ggplot(data_voicing, aes(x = voicing, y = bias)) +
   ylab("Choice Bias in expected direction") +
   xlab("Consonant voicing")+
   facet_wrap("Range")+
+  theme(strip.background =element_rect(fill="white"))+
+  theme(strip.text = element_text(colour = 'black'))+
   theme(strip.background =element_rect(fill="white"))+
   theme(strip.text = element_text(colour = 'black'))
 
@@ -659,12 +663,12 @@ consonant_graph <- ggplot(data_split_consonant_type, aes(x = consonant_type, y =
   ylab("Relative bias in expected direction") +
   xlab("Consonant type")+
   facet_wrap("Range")+ 
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))+
+  theme(axis.text.x = element_text(angle = 30, vjust = .5, hjust=.5))+
   theme(strip.background =element_rect(fill="white"))+
   theme(strip.text = element_text(colour = 'black'))
 
 consonant_graph
-ggsave("graphs/2023 poster/consonant.png", height = 3.5, width = 5.5)
+#ggsave("graphs/2023 poster/consonant.png", height = 3.5, width = 5.5)
 
 
 ```
@@ -730,13 +734,17 @@ Might also want to do semi partial- it excludes the overlap with the outcome var
 check with how Rsquared is interpreted
 
 ```{r}
-
 #partial correlation? 
 
-#library(ppcor)
+library(ppcor)
 pcor.test(data_WJ$WJ_score,data_WJ$bias,data_WJ$Age,method="pearson")
 
 spcor.test(data_WJ$WJ_score,data_WJ$bias,data_WJ$Age,method="pearson")
+
+#to see if there is an interaction between Age and WJ score? does the correlation between 2 variables change with age? the result with : in it is the interaction
+#linear regression
+WJ_lm <- lm(data_WJ$bias ~ data_WJ$Age + data_WJ$WJ_score + data_WJ$Age*data_WJ$WJ_score)
+summary(WJ_lm)
 
 ```
 looking at each age range individually
@@ -801,7 +809,25 @@ pcor.test(data_WJ_kids$WJ_score,data_WJ_kids$bias,data_WJ_kids$Age,method="pears
 #semi partial correlation? 
 #library(ppcor)
 spcor.test(data_WJ_kids$WJ_score,data_WJ_kids$bias,data_WJ_kids$Age,method="pearson")
+
+#to see if there is an interaction between Age and WJ score? does the correlation between 2 variables change with age? the result with : in it is the interaction
+#linear regression
+WJ_lmk <- lm(data_WJ_kids$bias ~ data_WJ_kids$Age + data_WJ_kids$WJ_score + data_WJ_kids$Age*data_WJ_kids$WJ_score)
+summary(WJ_lmk)
 ```
+
+What is the range of scores for each group?
+```{r}
+#6to8
+range(data_WJ_6to8$WJ_score)
+
+#9to11
+range(data_WJ_9to11$WJ_score)
+
+#adult
+range(data_WJ_adult$WJ_score)
+```
+
 
 #Inter-rater reliability
 ```{r}
