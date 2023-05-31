@@ -290,12 +290,15 @@ data_voicing = all_data_df %>% group_by(voicing, ID,Range) %>%
 data_consonant = all_data_df %>% group_by(consonant_type, ID,Range) %>%
   summarise(bias = sum(shape_choice)/n()-.5)
 ```
-How many trials did each participant get?
+#How many trials did each participant get?
 ```{r}
-all_data_df %>% filter(ID == "bkp025") #need to check about the number of trials each participant got
+#need to check about the number of trials each participant got
 trial_counts <- all_data_df %>% group_by(ID) %>%
-                               summarize(trial_counts = n())
-#mean(trial_counts$trial_counts)
+                               summarize(trial_counts = n()) %>%
+                                ungroup() %>%
+                              summarize(mean = mean(trial_counts),
+                                      sd = sd(trial_counts),
+                                      se = sd/sqrt(n()))
 #[1] 31.48438
 ```
 
@@ -352,7 +355,9 @@ summary(stim_m)
 
 
 #bonferroni correction
-#16 stimuli * 3 different age ranges
+#16 stimuli * 3 different age ranges, multiplies every p value by 48
+#sprintf prints out the more readable version of p value decimle 
+#[,4] gets the 4th column
 stim_tib <- tibble(categories = row.names(summary(stim_m)$coefficients),
                   old_p = summary(stim_m)$coefficients[,4],
                   p_vals = p.adjust(summary(stim_m)$coefficients[,4], method = "bonferroni", n = 16*3),
@@ -420,6 +425,7 @@ Anova(m_mult)
 contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
 bko2_range_difference_table <-contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
 
+#odds ratio is the effect size- if there is no difference the odds ratio is equal to 1, no effect. If it's farther from 1 in either direction it's more significant
 ```
 
 #orthography IS THERE A SIGNIFICANT DIFFERENCE FROM 0?
@@ -429,6 +435,15 @@ bko2_range_difference_table <-contrast(emmeans(m_mult, ~ Range | sound) , method
 stim_o <- glmer(shape_choice ~ 0 + sound:Range + (1|ID), data = all_data_df, family = binomial)
 summary(stim_o)
 
+#multiply all the p values by 6- Bonferonni 
+                 # p_vals = p.adjust(summary(stim_m)$coefficients[,4], method = "bonferroni", n = 16*3)
+
+
+Corrected_orth <- tibble(categories = row.names(summary(stim_o)$coefficients),
+                         p_vals = p.adjust(summary(stim_o)$coefficients[,4], method = "bonferroni", n = 2*3),
+                         p_val_print = sprintf("%.10f", p_vals))
+Corrected_orth
+#All bars are significantly different from zero except curved 6 to 8, does not survive correction
 ```
 
 #CONGRUENCY GRAPH
@@ -562,6 +577,13 @@ contrast(emmeans(m_mult_co, ~ Range | vowel_type) , method = "pairwise", type = 
 stim_v <- glmer(shape_choice ~ 0 + vowel_type:Range + (1|ID), data = all_data_df, family = "binomial") 
 summary(stim_v)
 
+#Bonferroni correction
+Corrected_v <- tibble(categories = row.names(summary(stim_v)$coefficients),
+                         p_vals = p.adjust(summary(stim_v)$coefficients[,4], method = "bonferroni", n = 2*3),
+                         p_val_print = sprintf("%.10f", p_vals))
+Corrected_v
+#vowel_type/a/:RangeAdult is the only one significantly different from chance
+
 ```
 # GRAPH FOR CONSONANT VOICING
 ```{r}
@@ -622,6 +644,12 @@ contrast(emmeans(m_mult_cv, ~ Range | voicing) , method = "pairwise", type = "re
 cv_binom <- glmer(shape_choice ~ 0 + Range:voicing + (1|ID), data = all_data_df, family = "binomial")
 summary(cv_binom)
 
+#Bonferroni correction
+Corrected_cv <- tibble(categories = row.names(summary(cv_binom)$coefficients),
+                         p_vals = p.adjust(summary(cv_binom)$coefficients[,4], method = "bonferroni", n = 2*3),
+                         p_val_print = sprintf("%.10f", p_vals))
+Corrected_cv
+#only RangeAdult:voicingvoiced is significantly different from chance
 ```
 
 #consonant graph 
@@ -695,10 +723,15 @@ IS THERE A SIGNIFICANT DIFFERENCE FROM 0?
 ```{r}
 #consonant_type:Range gets you the interaction term, which is the difference from 0 for each stimulus for each age range
 #ben mess
-real_binom <- glmer(shape_choice ~ 0 + Range:consonant_type + (1|ID), data = all_data_df, family = "binomial")
-summary(real_binom)
-#plogis(0.3830)
-       
+ct_real_binom <- glmer(shape_choice ~ 0 + Range:consonant_type + (1|ID), data = all_data_df, family = "binomial")
+summary(ct_real_binom)
+
+#Bonferroni correction
+Corrected_ct <- tibble(categories = row.names(summary(ct_real_binom)$coefficients),
+                         p_vals = p.adjust(summary(ct_real_binom)$coefficients[,4], method = "bonferroni", n = 3*3),
+                         p_val_print = sprintf("%.10f", p_vals))
+Corrected_ct
+#only thing that changes is Range6 to 8:consonant_typestop is no longer significant
 ```
 
 
@@ -836,10 +869,8 @@ range(data_WJ_adult$WJ_score)
 #ICC needs to be two-way, consistency not agreement, single unit
 library("irr")
 
-data("anxiety", package = "irr")
-head(anxiety, 4)
-
 ICC_data <- read_excel("reliability scoring.xlsx")
+
 icc(
   ICC_data, model = "twoway", 
   type = "consistency", unit = "single"
