@@ -1,6 +1,7 @@
-Last updated: May 24 2023
+Last updated: June 2 2023
 This procedure requires you to have: the RDS files for each participant in bko2, an empty file for the CSVs, and empty file for practice trials. 
 This file creates graphs and does analysis for each main measure in bko2.
+options(digits = 3)
 
 
 First we load in the packages
@@ -423,9 +424,16 @@ m_mult <- glmer(shape_choice ~ Range*sound + (1|ID), data = all_data_df, family 
 Anova(m_mult)
 
 contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
-bko2_range_difference_table <-contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
+bko2_orth_contrast_table <-contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
+bko2_orth_contrast_table <- as.data.frame(bko2_orth_contrast_table)
+bko2_orth_contrast_table <- bko2_orth_contrast_table %>% mutate(
+                                        p.value = round(p.value,digits = 3),
+                                        z.ratio = round(z.ratio, digits = 3)) %>%
+                                        dplyr::select(!c(df,null))
+                                        
 
 #odds ratio is the effect size- if there is no difference the odds ratio is equal to 1, no effect. If it's farther from 1 in either direction it's more significant
+write.xlsx(bko2_orth_contrast_table, file = "bko2 tables/orth contrast.xlsx")
 ```
 
 #orthography IS THERE A SIGNIFICANT DIFFERENCE FROM 0?
@@ -722,7 +730,6 @@ IS THERE A SIGNIFICANT DIFFERENCE FROM 0?
  you want to see if every group is different from zero, and so you want a model that just looks at the smallest groups (each sound for each age group), with none of the big groupings. that’s why you just look at the interaction, not sound*range. This is doing those 6 individual t tests, and correcting for the number of t tests at the same time. 
 ```{r}
 #consonant_type:Range gets you the interaction term, which is the difference from 0 for each stimulus for each age range
-#ben mess
 ct_real_binom <- glmer(shape_choice ~ 0 + Range:consonant_type + (1|ID), data = all_data_df, family = "binomial")
 summary(ct_real_binom)
 
@@ -881,5 +888,14 @@ library(psych)
 ICC(ICC_data)
 ```
 
+#overall model
+```{r}
 
+model <- glmer(correct ~ Range * (sound +voicing + congruent + vowel_type + consonant_type) + (1|ID), data = all_data_df, family = "binomial")
+Anova(model)
+
+model2 <- glmer(correct ~ Range * sound *voicing * congruent * vowel_type * consonant_type + (1|ID), data = all_data_df, family = "binomial")
+Anova(model2)
+#This model fails to converge, too many categories that are too overlapping 
+```
 
