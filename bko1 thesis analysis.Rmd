@@ -13,6 +13,9 @@ library("writexl")
 library(ggplot2)
 library(ggpubr)
 library(lme4)       #for glmer
+library(car)        # for Anova()
+library(emmeans)
+
 
 
 
@@ -21,6 +24,15 @@ right_key = "m"
 
 round_any <- function(x, accuracy, f=round){f(x/ accuracy) * accuracy}
 
+```
+#Colors
+This assigns HEX codes for all the colors in the graph
+```{r}
+angular_color = "#E01A4F"
+curved_color = "#FFC05C"
+third_color = "#80B8EF"
+congruent_color = "#56B375"
+incongruent_color = "#9046CF"
 ```
 
 
@@ -67,6 +79,7 @@ which_is_correct <- function(stimuli,lefts,rights) {
 }
 
 #look at the results files
+#this data set in LG_DI_five_rds is NON CONFOUND ONLY- 16 5, 20 6-8, 24 9-11, 41 adults
 rds_files <- list.files("LG_DI_five_rds",
                         pattern = "\\.rds$",
                         full.names = TRUE)
@@ -211,7 +224,7 @@ LG_data_df_combined_bias <- LG_data_df_combined_bias %>% mutate(choice_number = 
 #write.csv(LG_data_df_combined_bias, "significance tables/full data set.csv")
 ```
 
-#How many trials did each participant get?
+#lg How many trials did each participant get?
 ```{r}
 #need to check about the number of trials each participant got
 trial_counts <- LG_data_df_combined_bias %>% group_by(ID) %>%
@@ -304,24 +317,6 @@ LG_average_gminusl <- LG_poirel_all %>% group_by(ID,Range) %>%
 
 ```{r}
 
-#GRAPH TIME
-LG_poirel_plot <-ggplot() +
-  geom_col(LG_bias_poirel, mapping = aes(x = interaction(LG_group,Range), y = mean_bias), color = "black", fill = NA) +
-  geom_point(LG_poirel_points, mapping = aes(x = interaction(LG_group,Range), y = bias_round, size = Count, color = Range)) +
-  geom_col(LG_bias_poirel, mapping = aes(x = interaction(LG_group,Range), y = mean_bias, fill = Range), alpha = 0.5) +
-  geom_point(LG_bias_poirel, mapping = aes(x = interaction(LG_group,Range), y = mean_bias)) +
-  geom_errorbar(LG_bias_poirel, mapping = aes(x = interaction(LG_group,Range), y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = .75) +
-  theme_classic() +
-  #facet_wrap("Range") +
-  ylab("Global Bias") +
-  xlab("global and local groups in each age range") +
-  ylab("<local bias, global bias>")
-
-LG_poirel_plot
-```
-
-```{r}
-
 ####average GminusL for each age range
 LG_poirel_plot2 <-ggplot() +
   geom_col(LG_weighted_avg, mapping = aes(x = Range, y = avg_bias), color = "black", fill = NA) +
@@ -334,27 +329,30 @@ LG_poirel_plot2 <-ggplot() +
   #scale_color_manual(values = rev(cols)) +
   #scale_fill_manual(values = rev(cols)) +
   xlab("global and local groups in each age range") +
-  ylab("<local bias, global bias>")
+  ylab("<- local bias, global bias ->")
 
 LG_poirel_plot2
 ```
-analysis- are they different from 0? LG_poirel_plot
+#analysis- are they different from 0? LG_poirel_plot2
 ```{r}
 #LG_bias_poirel_one_row
-stim_o <- glmer(shape_choice ~ 0 + sound:Range + (1|ID), data = all_data_df, family = binomial)
-summary(stim_o)
-
-lgm1 <- glm(GminusL ~ 0+Range:LG_group, data = LG_bias_poirel_one_row)
+lgm1 <- glm(GminusL ~ 0 + Range, data = LG_bias_poirel_one_row)
 summary(lgm1)
+Anova(lgm1)
+# none are different from zero
 
-# they're all different from zero
+
+#are they different from each other?
+contrast(emmeans(lgm1, ~ Range) , method = "pairwise", type = "response")
+
+
 
 #lg_bias_table <-summary.glm(m1)$coefficients
 #write.csv(bko1_bias_table, "significance tables/bko1_bias_table.csv")
 
 
 #checking 
-age_group <- LG_bias_poirel_one_row %>% filter(LG_group == "local") %>% filter(Range == "5")
+age_group <- LG_bias_poirel_one_row %>% filter(Range == "5")
 # One-sample t-test
 res <- t.test(age_group$GminusL, mu = 0)
 # Printing the results: significantly different from zero
@@ -362,61 +360,19 @@ res
 
 ```
 
-how to tell if the age groups are different from each other
-
+Is there a significant change in the proportion of L to G participants with age?
 ```{r}
-library(car)        # for Anova()
-library(ggpubr)
-library(emmeans)
+LG_bias_poirel_one_row <- LG_bias_poirel_one_row %>% mutate(LG_group_bi = ifelse(LG_group == "local", 1,0))
 
-
-#by range
-lgm_mult <- glm(GminusL ~ Range*LG_group, data = LG_bias_poirel_one_row)
-lgm_add <- glm(GminusL ~ Range+LG_group, data = LG_bias_poirel_one_row)
-ICtab(lgm_mult, lgm_add)
-
-Anova(lgm_mult)
-
-contrast(emmeans(lgm_mult, ~ Range | LG_group) , method = "pairwise", type = "response")
-bko1_range_difference_table <-contrast(emmeans(lgm_mult, ~ Range | LG_group) , method = "pairwise", type = "response")
-
-#write.csv(bko1_difference_table, "significance tables/bko1_difference_table.csv")
-
-#by age
-lgm_mult_a <- glm(bias ~ Age*LG_group, data = LG_bias_poirel_one_row)
-lgm_add_a <- glm(bias ~ Age+LG_group, data = LG_bias_poirel_one_row)
-ICtab(lgm_mult_a, lgm_add_a)
-
-Anova(lgm_mult_a)
-
-contrast(emmeans(lgm_mult_a, ~ Age | LG_group) , method = "pairwise", type = "response")
-#bko1_age_difference_table <-contrast(emmeans(lgm_mult_a, ~ Age | LG_group) , method = "pairwise", type = "response")
+lgm1 <- glm(LG_group_bi ~ 0 + Range, data = LG_bias_poirel_one_row, family = binomial)
+summary(lgm1)
+Anova(lgm1)
 ```
 
-weighted ave plot: how to tell if the age groups are different from each other
 
-```{r}
-library(car)        # for Anova()
-library(ggpubr)
-library(emmeans)
-
-
-#by range
-lgm_mult_b <- aov(GminusL ~ Range, data = LG_average_gminusl)
-
-#### are the weighted averages different from each other? LG_average_gminusl dataset 
-Anova(lgm_mult_b)
-summary(lgm_mult_b)
-TukeyHSD(lgm_mult_b)
-
-contrast(emmeans(lgm_mult_b, ~ Range | LG_group) , method = "pairwise", type = "response")
-bko1_range_difference_table <-contrast(emmeans(lgm_mult_b, ~ Range | LG_group) , method = "pairwise", type = "response")
-
-#write.csv(bko1_difference_table, "significance tables/bko1_difference_table.csv")
-
-```
 
 ***************************************************************************
+#first half
 Testing only the first half of trials for LG
 slice only the top 12 rows for each participant
 ```{r}
@@ -516,7 +472,7 @@ Anova(lgm_add)
 contrast(emmeans(lgm_mult, ~ Range | LG_group) , method = "pairwise", type = "response")
 bko1_range_difference_table <-contrast(emmeans(lgm_mult, ~ Range | LG_group) , method = "pairwise", type = "response")
 ```
-analysis how to tell if the averages are different form each other
+analysis how to tell if the averages are different from each other
 
 ```{r}
 #by range
@@ -532,4 +488,219 @@ five_to_adult <- LG_half_trials_one_row %>%  filter(Range == "5" | Range == "Adu
 res <- t.test(GminusL ~ Range, data = five_to_adult)
 res
 ```
+
+#correlation LG to BK
+first make the csvs in LG nc plus bk for all participants- makes 2 files for each person, one _lg and one _bk
+```{r}
+#look at the results files
+rds_files <- list.files("LG_DI_five_rds",
+                        pattern = "\\.rds$",
+                        full.names = TRUE)
+
+rds_files
+#change [#] to pick which one to read
+
+for(file in rds_files){
+  print(file)
+  file_id <- str_extract(file,"b[kl]g\\d\\d\\d")
+  
+  data <- readRDS(file)
+  
+  #assign ID
+  participant_ID <- data$results$`sp_id`[[1]]
+  main_data <- data$results$`Main page`[[1]]
+  
+  
+  df <- read.table(text = main_data, sep =",", header = TRUE, stringsAsFactors = FALSE)
+  #df is the raw data, tells you stimulus and responses
+  
+  
+  ##Ben Code ***creating tidy data and choice bias score***
+  
+  #First remove unneeded columns
+  data_cols <- df %>% select(c(trial_type,stimulus,response,left_image,right_image,correct_response,correct)) 
+  
+  #Then Filter practice and experimental trials
+  data_prac <- data_cols %>% filter(grepl("Prac", stimulus, fixed = TRUE))
+  data_exp <- data_cols %>% filter(!grepl("Prac", stimulus, fixed = TRUE)) %>%
+    filter(trial_type  %in% c("bouba-kiki","image-keyboard-response")) %>%
+    filter(stimulus != "img/fixation.png")
+  
+  #filter out BK data 
+  data_exp_bk <-data_exp %>% filter(trial_type == "bouba-kiki")
+  #filter out the LG data
+  data_exp_lg <-data_exp %>% filter(trial_type =="image-keyboard-response") %>%
+    select(c(trial_type, stimulus, response))
+  
+  #Now write a function to find if the left or the right image is "correct"
+  
+  data_exp_bk <- data_exp_bk %>% mutate(correct_response = which_is_correct(stimulus,left_image,right_image))
+  data_exp_bk <- data_exp_bk %>% mutate(correct = ifelse(correct_response == response,
+                                                         1,
+                                                         ifelse(response == left_key | response == right_key,
+                                                                0,
+                                                                NA)))
+  
+  data_exp_bk <- data_exp_bk %>% mutate(sound = ifelse(stimulus %in% c("sound/baba_rep.wav","sound/gaga_rep.wav"),
+                                                       "round",
+                                                       ifelse(stimulus %in% c("sound/teetee.wav","sound/keekee.wav"),
+                                                              "spiky",
+                                                              NA))) %>%
+    filter(!is.na(correct))
+  
+#adding columns to LG files to do analysis ############
+  data_exp_lg <- data_exp_lg %>% separate(stimulus, c("type","image_ID"), sep = "/") 
+  
+  data_exp_lg <- data_exp_lg %>% group_by(type) %>% 
+                                mutate(trial_num = row_number()) %>% 
+                                ungroup() %>%
+                                pivot_wider(names_from = type, values_from = c(image_ID,response)) %>%
+                                select(!c(trial_type,response_targets))
+
+  
+  
+  
+  
+  file_path_bk <- paste0("LG nc plus bk/",file_id,"_bk.csv")
+  file_path_lg <- paste0("LG nc plus bk/",file_id,"_lg.csv")
+  
+  #file_path_prac <- paste0("LG practice trials/",file_id,".csv")
+  #write.csv(data_prac, file_path_prac)
+  
+  write.csv(data_exp_bk, file_path_bk) 
+  write.csv(data_exp_lg, file_path_lg)
+  
+}
+```
+
+Add them all together
+```{r}
+all_files <- list.files("LG nc plus bk")
+first_file <- TRUE
+
+#Adds ID code onto each trial, binds all individual csvs into one large dataframe
+for(i in 1:length(all_files)){
+  if(grepl("bk",all_files[i])){
+    print(all_files[i])
+    if(first_file){
+      bk_data_df <- read.csv(paste0("LG nc plus bk/",all_files[i]))
+      bk_data_df <- bk_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      first_file <- FALSE
+    }
+    else{
+      bknew_data_df <- read.csv(paste0("LG nc plus bk/",all_files[i]))
+      bknew_data_df <- bknew_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      bk_data_df <- rbind(bk_data_df,bknew_data_df)
+    }
+  }
+}
+
+unique(bk_data_df$ID)
+```
+add in ages
+```{r}
+age_table <- read_excel("LG_ages_5.xlsx")
+age_table <- age_table %>% mutate(ID = tolower(ID)) #%>% select(ID,Age,Range)
+bk_data_combined <- full_join(bk_data_df,age_table, by="ID")
+```
+#choice bias calculations
+```{r}
+#CALCULATE CHOICE BIAS
+#first create a new column shape_choice that has a 1 if they chose round, 0 if they chose spiky
+bk_data_combined <- bk_data_combined %>% mutate(shape_choice = ifelse(grepl("bouba",left_image)  & response == left_key,
+                                                         1,
+                                                         ifelse(grepl("bouba",right_image)  & response == right_key, 1,
+                                                         0))) 
+
+
+```
+#bk How many trials did each participant get?
+```{r}
+#need to check about the number of trials each participant got
+trial_counts <- bk_data_combined %>% group_by(ID) %>%
+                               summarize(trial_counts = n()) %>%
+                                ungroup() %>%
+                              summarize(mean = mean(trial_counts),
+                                      sd = sd(trial_counts),
+                                      se = sd/sqrt(n()))
+#[1] 31
+```
+
+#bk Graph for all the stimuli for all age groups individually
+```{r}
+bk_bias_data <- bk_data_combined %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+                                      group_by(ID,sound,Range) %>% 
+                                      summarise(bias = sum(shape_choice)/n() - 0.5) %>% 
+                                      group_by(sound,Range) %>%
+                                      summarize(mean_bias = mean(bias),
+                                                sd_bias = sd(bias),
+                                                se_bias=sd_bias/sqrt(n()),
+                                                N = n()) %>%
+                                      ungroup() 
+
+bk_bias_data_points <- bk_data_combined %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+                                      group_by(ID,sound,Range) %>% 
+                                      summarise(bias = sum(shape_choice)/n() - 0.5) %>% 
+                                      ungroup() %>%
+                                      mutate(bias_round = round_any(bias,0.25)) %>%
+                                      group_by(Range,sound,bias_round) %>%
+                                      summarise(Count = n())
+
+
+```
+#GRAPH
+
+```{r}
+
+bk_overall <- ggplot() +
+  geom_col(bk_bias_data, mapping = aes(x = sound, y = mean_bias), color = "black", fill = NA) +
+  geom_point(bk_bias_data_points, mapping =aes(x = sound, y = bias_round, size = Count, color= sound)) +
+  geom_col(bk_bias_data, mapping = aes(x = sound, y = mean_bias, fill = sound), alpha = 0.5) +
+  geom_errorbar(bk_bias_data, mapping = aes(x = sound, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1) +
+  scale_fill_manual(values = c(angular_color,curved_color)) +
+  scale_color_manual(values = c(angular_color,curved_color)) +
+  theme_light() +
+  ylim(-0.5,0.5) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  ylab("Choice Bias") +
+  xlab("Stimulus") +
+  facet_wrap("Range")
+
+bk_overall
+#ggsave("graphs/presentation graphs/bk_overall.png", width = 10, height = 5)
+```
+#comparing bk choice bias to LG bias
+use bias scores (GminusL) from LG poirel with 5 yo.R markdown
+is there a correlation between your group (local or global group) and your BK bias score?
+```{r}
+#make a new dataframe with the following columns for each ID: round/spiky bias scores, GminusL scores, LG_group assignment
+LG_score_only <- LG_bias_poirel_one_row %>% dplyr::select(ID, Range, GminusL, LG_group) 
+
+#what should be calculated??? sum correct, or sum shape choice?
+BK_bias_only <- bk_data_combined %>% group_by(ID) %>%
+                  mutate(total_bk_bias = sum(correct)/n()-.5) %>% dplyr::select(ID, total_bk_bias)  %>%
+                filter(row_number()==1)
+
+BK_LG_scores <- full_join(LG_score_only, BK_bias_only, by="ID")
+
+#pearson's correlation 
+#make sure the midpoints on each axis is at chance
+
+
+cor.test(BK_LG_scores$GminusL, BK_LG_scores$total_bk_bias, method = "pearson")
+#p-value = 0.6083
+
+cor_plot <-  ggplot(BK_LG_scores, aes(GminusL, total_bk_bias))
+cor_plot + geom_point() +
+  theme_light()+
+  #ylim(-0.50,0.50)+
+  geom_smooth(method='lm')+
+  facet_wrap("Range")+
+  ylab("BK bias in expected direction")+
+  xlab("<- local bias, global bias ->")+
+  theme(strip.background =element_rect(fill="white"))+
+  theme(strip.text = element_text(colour = 'black'))
+
+```
+
 

@@ -16,7 +16,7 @@ library(bbmle)      # for ICtab()
 library(car)        # for Anova()
 library(readxl)
 library("writexl")
-library("xlsx")
+#library("xlsx")
 library(viridis)
 library(ppcor) #for partial correlation
 library(lpSolve)
@@ -40,7 +40,7 @@ incongruent_color = "#9046CF"
 round_any <- function(x, accuracy, f=round){f(x/ accuracy) * accuracy}
 ```
 
-generate CSVs from RDS- only run if you have an empy folder ready for the csv to go 
+generate CSVs from RDS- only run if you have an empty folder ready for the csv to go 
 
 ```{r}
 
@@ -423,7 +423,10 @@ m_mult <- glmer(shape_choice ~ Range*sound + (1|ID), data = all_data_df, family 
 
 Anova(m_mult)
 
-contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
+## |> is a pipe operator in version 4.1, passes to confint() to calculate
+contrast(emmeans(m_mult, ~ Range | sound), method = "pairwise", type = "response") |> confint()
+
+
 bko2_orth_contrast_table <-contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
 bko2_orth_contrast_table <- as.data.frame(bko2_orth_contrast_table)
 bko2_orth_contrast_table <- bko2_orth_contrast_table %>% mutate(
@@ -433,7 +436,7 @@ bko2_orth_contrast_table <- bko2_orth_contrast_table %>% mutate(
                                         
 
 #odds ratio is the effect size- if there is no difference the odds ratio is equal to 1, no effect. If it's farther from 1 in either direction it's more significant
-write.xlsx(bko2_orth_contrast_table, file = "bko2 tables/orth contrast.xlsx")
+#write.xlsx(bko2_orth_contrast_table, file = "bko2 tables/orth contrast.xlsx")
 ```
 
 #orthography IS THERE A SIGNIFICANT DIFFERENCE FROM 0?
@@ -512,8 +515,18 @@ m_mult_c <- glmer(correct ~ Range*congruent + (1|ID), data = all_data_df, family
 
 Anova(m_mult_c)
 
-contrast(emmeans(m_mult_c, ~ Range | congruent) , method = "pairwise", type = "response")
-#bko1_range_difference_table <-contrast(emmeans(m_add_c, ~ Range | sound) , method = "pairwise", type = "response")
+contrast(emmeans(m_mult_c, ~ Range | congruent) , method = "pairwise", type = "response") %>% confint()
+
+bko2_congruency_contrast <-contrast(emmeans(m_mult_c, ~ Range | congruent) , method = "pairwise", type = "response")
+bko2_congruency_contrast <- as.data.frame(bko2_congruency_contrast)
+bko2_congruency_contrast <- bko2_congruency_contrast %>% mutate(
+                                        p.value = round(p.value,digits = 3),
+                                        z.ratio = round(z.ratio, digits = 3)) %>%
+                                        dplyr::select(!c(df,null))
+                                        
+
+#odds ratio is the effect size- if there is no difference the odds ratio is equal to 1, no effect. If it's farther from 1 in either direction it's more significant
+write.xlsx(bko2_congruency_contrast, file = "bko2 tables/congruency contrast.xlsx")
 ```
 analysis
 how to tell if there is a difference between congruent and incongruent for each age group
@@ -580,6 +593,16 @@ m_mult_co <- glmer(shape_choice ~ Range*vowel_type + (1|ID), data = all_data_df,
 Anova(m_mult_co)
 
 contrast(emmeans(m_mult_co, ~ Range | vowel_type) , method = "pairwise", type = "response")
+bko2_vowel_contrast <-contrast(emmeans(m_mult_co, ~ Range | vowel_type) , method = "pairwise", type = "response")
+bko2_vowel_contrast <- as.data.frame(bko2_vowel_contrast)
+bko2_vowel_contrast <- bko2_vowel_contrast %>% mutate(
+                                        p.value = round(p.value,digits = 3),
+                                        z.ratio = round(z.ratio, digits = 3)) %>%
+                                        dplyr::select(!c(df,null))
+                                        
+
+#odds ratio is the effect size- if there is no difference the odds ratio is equal to 1, no effect. If it's farther from 1 in either direction it's more significant
+write.xlsx(bko2_vowel_contrast, file = "bko2 tables/vowel contrast.xlsx")
 
 ###########difference from chance?
 stim_v <- glmer(shape_choice ~ 0 + vowel_type:Range + (1|ID), data = all_data_df, family = "binomial") 
@@ -647,6 +670,16 @@ m_mult_cv <- glmer(shape_choice ~ Range*voicing + (1|ID), data = all_data_df, fa
 Anova(m_mult_cv)
 
 contrast(emmeans(m_mult_cv, ~ Range | voicing) , method = "pairwise", type = "response")
+bko2_voicing_contrast <-contrast(emmeans(m_mult_cv, ~ Range | voicing) , method = "pairwise", type = "response")
+bko2_voicing_contrast <- as.data.frame(bko2_voicing_contrast)
+bko2_voicing_contrast <- bko2_voicing_contrast %>% mutate(
+                                        p.value = round(p.value,digits = 3),
+                                        z.ratio = round(z.ratio, digits = 3)) %>%
+                                        dplyr::select(!c(df,null))
+                                        
+
+#odds ratio is the effect size- if there is no difference the odds ratio is equal to 1, no effect. If it's farther from 1 in either direction it's more significant
+#write.xlsx(bko2_voicing_contrast, file = "bko2 tables/voicing contrast.xlsx")
 
 ## which ones are different form zero?
 cv_binom <- glmer(shape_choice ~ 0 + Range:voicing + (1|ID), data = all_data_df, family = "binomial")
@@ -721,6 +754,16 @@ m_mult_co <- glmer(shape_choice ~ Range*consonant_type + (1|ID), data = all_data
 Anova(m_mult_co)
 
 contrast(emmeans(m_mult_co, ~ Range | consonant_type) , method = "pairwise", type = "response")
+bko2_consonanttype_contrast <-contrast(emmeans(m_mult_co, ~ Range | consonant_type) , method = "pairwise", type = "response")
+bko2_consonanttype_contrast <- as.data.frame(bko2_consonanttype_contrast)
+bko2_consonanttype_contrast <- bko2_consonanttype_contrast %>% mutate(
+                                        p.value = round(p.value,digits = 3),
+                                        z.ratio = round(z.ratio, digits = 3)) %>%
+                                        dplyr::select(!c(df,null))
+                                        
+
+#odds ratio is the effect size- if there is no difference the odds ratio is equal to 1, no effect. If it's farther from 1 in either direction it's more significant
+write.xlsx(bko2_consonanttype_contrast, file = "bko2 tables/consonant type contrast.xlsx")
 
 ```
 

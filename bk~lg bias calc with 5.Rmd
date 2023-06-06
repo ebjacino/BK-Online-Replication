@@ -237,7 +237,7 @@ Anova(m_mult)
 contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
 
 
- ```
+```
 
 calculate bias BK
 ```{r}
