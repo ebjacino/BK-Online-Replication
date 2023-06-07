@@ -478,5 +478,10 @@ contrast(emmeans(lgm_lg_bk_a, ~ Range | LG_group_num) , method = "pairwise", typ
 
 ```
 
-
+orth_Ttests <- tibble(Group = c(rep("6 to 8",2),rep("9 to 11",2),rep("Adult",2)),
+                      Sound = rep(c("Curved","Angular"),3),
+                      Estimate = c(summary(stim_o)$Estimate[1:6]),
+                      Pvalues = 
+                      
+                      )
 

@@ -16,13 +16,14 @@ library(bbmle)      # for ICtab()
 library(car)        # for Anova()
 library(readxl)
 library("writexl")
-#library("xlsx")
 library(viridis)
 library(ppcor) #for partial correlation
 library(lpSolve)
 library(irr) #for inter-rater reliability
 library(dplyr)
 library(stringr)
+library(broom)
+
 
 ```
 #Colors
@@ -456,6 +457,32 @@ Corrected_orth <- tibble(categories = row.names(summary(stim_o)$coefficients),
 Corrected_orth
 #All bars are significantly different from zero except curved 6 to 8, does not survive correction
 ```
+#orthography t test table
+```{r}
+stim_o <- glmer(shape_choice ~ 0 + sound:Range + (1|ID), data = all_data_df, family = binomial)
+summary(stim_o)
+orth_summary <- summary(stim_o)
+
+
+Corrected_orth <- tibble(categories = row.names(summary(stim_o)$coefficients),
+                         p_vals = p.adjust(summary(stim_o)$coefficients[,4], method = "bonferroni", n = 2*3),
+                         p_val_print = sprintf("%.10f", p_vals))
+Corrected_orth
+
+orth_Ttests <- as.data.frame(orth_summary$coefficients) 
+
+#making a table with the corrected p values
+orth_Ttests <- orth_Ttests %>% mutate(P.vals = Corrected_orth$p_val_print,
+                                      P.vals = as.numeric(P.vals),
+                                      P.vals = round(P.vals, digits = 4),
+                                      Estimate = round(Estimate, digits = 4),
+                                      `Std. Error` = round(`Std. Error`, digits = 4),
+                                      `z value` = round(`z value`, digits = 4)) %>%
+                              dplyr::select(!"Pr(>|z|)")
+
+
+```
+
 
 #CONGRUENCY GRAPH
 ```{r}
@@ -528,6 +555,7 @@ bko2_congruency_contrast <- bko2_congruency_contrast %>% mutate(
 #odds ratio is the effect size- if there is no difference the odds ratio is equal to 1, no effect. If it's farther from 1 in either direction it's more significant
 write.xlsx(bko2_congruency_contrast, file = "bko2 tables/congruency contrast.xlsx")
 ```
+
 analysis
 how to tell if there is a difference between congruent and incongruent for each age group
 ```{r}
@@ -616,6 +644,31 @@ Corrected_v
 #vowel_type/a/:RangeAdult is the only one significantly different from chance
 
 ```
+
+#vowel t test table
+```{r}
+stim_v <- glmer(shape_choice ~ 0 + vowel_type:Range + (1|ID), data = all_data_df, family = "binomial") 
+summary(stim_v)
+vowel_summary <- summary(stim_v)
+
+#Bonferroni correction
+Corrected_v <- tibble(categories = row.names(summary(stim_v)$coefficients),
+                         p_vals = p.adjust(summary(stim_v)$coefficients[,4], method = "bonferroni", n = 2*3),
+                         p_val_print = sprintf("%.10f", p_vals))
+Corrected_v
+
+vowel_Ttests <- as.data.frame(vowel_summary$coefficients) 
+
+#making a table with the corrected p values
+vowel_Ttests <- vowel_Ttests %>% mutate(P.vals = Corrected_v$p_val_print,
+                                      P.vals = as.numeric(P.vals),
+                                      P.vals = round(P.vals, digits = 4),
+                                      Estimate = round(Estimate, digits = 4),
+                                      `Std. Error` = round(`Std. Error`, digits = 4),
+                                      `z value` = round(`z value`, digits = 4)) %>%
+                              dplyr::select(!"Pr(>|z|)")
+```
+
 # GRAPH FOR CONSONANT VOICING
 ```{r}
 #
@@ -692,6 +745,29 @@ Corrected_cv <- tibble(categories = row.names(summary(cv_binom)$coefficients),
 Corrected_cv
 #only RangeAdult:voicingvoiced is significantly different from chance
 ```
+#voicing t test table
+```{r}
+cv_binom <- glmer(shape_choice ~ 0 + Range:voicing + (1|ID), data = all_data_df, family = "binomial")
+summary(cv_binom)
+cv_summary <- summary(cv_binom)
+
+#Bonferroni correction
+Corrected_cv <- tibble(categories = row.names(summary(cv_binom)$coefficients),
+                         p_vals = p.adjust(summary(cv_binom)$coefficients[,4], method = "bonferroni", n = 2*3),
+                         p_val_print = sprintf("%.10f", p_vals))
+Corrected_cv
+
+voicing_Ttests <- as.data.frame(cv_summary$coefficients) 
+
+#making a table with the corrected p values
+voicing_Ttests <- voicing_Ttests %>% mutate(P.vals = Corrected_cv$p_val_print,
+                                      P.vals = as.numeric(P.vals),
+                                      P.vals = round(P.vals, digits = 4),
+                                      Estimate = round(Estimate, digits = 4),
+                                      `Std. Error` = round(`Std. Error`, digits = 4),
+                                      `z value` = round(`z value`, digits = 4)) %>%
+                              dplyr::select(!"Pr(>|z|)")
+```
 
 #consonant graph 
 for one is in the style of Bottini et al 2019 with the proportion of spiky shapes, see previous version, bko2 thesis graphs and analysis
@@ -767,8 +843,6 @@ write.xlsx(bko2_consonanttype_contrast, file = "bko2 tables/consonant type contr
 
 ```
 
-Are they different from chance (50 %) or
-
 IS THERE A SIGNIFICANT DIFFERENCE FROM 0?
  you want to see if every group is different from zero, and so you want a model that just looks at the smallest groups (each sound for each age group), with none of the big groupings. that’s why you just look at the interaction, not sound*range. This is doing those 6 individual t tests, and correcting for the number of t tests at the same time. 
 ```{r}
@@ -782,6 +856,28 @@ Corrected_ct <- tibble(categories = row.names(summary(ct_real_binom)$coefficient
                          p_val_print = sprintf("%.10f", p_vals))
 Corrected_ct
 #only thing that changes is Range6 to 8:consonant_typestop is no longer significant
+```
+#consonant t test table
+```{r}
+ct_real_binom <- glmer(shape_choice ~ 0 + Range:consonant_type + (1|ID), data = all_data_df, family = "binomial")
+summary(ct_real_binom)
+c_summary <- summary(ct_real_binom)
+
+#Bonferroni correction
+Corrected_ct <- tibble(categories = row.names(summary(ct_real_binom)$coefficients),
+                         p_vals = p.adjust(summary(ct_real_binom)$coefficients[,4], method = "bonferroni", n = 3*3),
+                         p_val_print = sprintf("%.10f", p_vals))
+
+consonant_Ttests <- as.data.frame(c_summary$coefficients) 
+
+#making a table with the corrected p values
+consonant_Ttests <- consonant_Ttests %>% mutate(P.vals = Corrected_ct$p_val_print,
+                                      P.vals = as.numeric(P.vals),
+                                      P.vals = round(P.vals, digits = 4),
+                                      Estimate = round(Estimate, digits = 4),
+                                      `Std. Error` = round(`Std. Error`, digits = 4),
+                                      `z value` = round(`z value`, digits = 4)) %>%
+                              dplyr::select(!"Pr(>|z|)")
 ```
 
 
