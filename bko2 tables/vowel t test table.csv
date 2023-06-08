@@ -1,0 +1,19 @@
+Estimate,Std. Error,z value,P.vals,P.vals,categories
+-0.0062,0.1269,-0.0486,1,1,vowel_type/a/:Range6 to 8
+-0.0329,0.1278,-0.2577,1,1,vowel_type/i/:Range6 to 8
+0.2065,0.1301,1.587,0.6751,0.6751,vowel_type/a/:Range9 to 11
+-0.1911,0.13,-1.4701,0.8492,0.8492,vowel_type/i/:Range9 to 11
+0.5314,0.1323,4.0158,4.00E-04,4.00E-04,vowel_type/a/:RangeAdult
+-0.0364,0.1289,-0.282,1,1,vowel_type/i/:RangeAdult
+,,,,,
+,,,,,
+,,,,,
+,Estimate,Std. Error,z value,P.vals,
+/i/ vowel type,,,,,
+6 to 8,-0.0329,0.1278,-0.2577,1,
+9 to 11,-0.1911,0.13,-1.4701,0.8492,
+Adult,-0.0364,0.1289,-0.282,1,
+/a/ vowel type,,,,,
+6 to 8,-0.0062,0.1269,-0.0486,1,
+9 to 11,-0.1911,0.13,-1.4701,0.6751,
+Adult,0.5314,0.1323,4.0158,4.00E-04,

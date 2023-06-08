@@ -1,0 +1,10 @@
+"","Estimate","Std. Error","z value","P.vals"
+"Range6 to 8:consonant_typefricative",-0.1533,0.1471,-1.0426,1
+"Range9 to 11:consonant_typefricative",-0.03,0.15,-0.1997,1
+"RangeAdult:consonant_typefricative",0.2477,0.1501,1.6505,0.8896
+"Range6 to 8:consonant_typesonorant",0.6288,0.1791,3.5112,0.004
+"Range9 to 11:consonant_typesonorant",0.9114,0.1897,4.8039,0
+"RangeAdult:consonant_typesonorant",1.7441,0.2292,7.6103,0
+"Range6 to 8:consonant_typestop",-0.3105,0.1492,-2.0812,0.3367
+"Range9 to 11:consonant_typestop",-0.5337,0.1535,-3.4774,0.0046
+"RangeAdult:consonant_typestop",-0.5649,0.1537,-3.6748,0.0021

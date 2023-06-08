@@ -437,7 +437,8 @@ bko2_orth_contrast_table <- bko2_orth_contrast_table %>% mutate(
                                         
 
 #odds ratio is the effect size- if there is no difference the odds ratio is equal to 1, no effect. If it's farther from 1 in either direction it's more significant
-#write.xlsx(bko2_orth_contrast_table, file = "bko2 tables/orth contrast.xlsx")
+library(xlsx)
+write.csv(bko2_orth_contrast_table, file = "bko2 tables/orth contrast.xlsx")
 ```
 
 #orthography IS THERE A SIGNIFICANT DIFFERENCE FROM 0?
@@ -479,8 +480,11 @@ orth_Ttests <- orth_Ttests %>% mutate(P.vals = Corrected_orth$p_val_print,
                                       `Std. Error` = round(`Std. Error`, digits = 4),
                                       `z value` = round(`z value`, digits = 4)) %>%
                               dplyr::select(!"Pr(>|z|)")
+write.xlsx(bko2_orth_contrast_table, file = "bko2 tables/orth contrast.xlsx")
 
-
+df1.to_excel("output.xlsx")  
+orth_Ttests.to_excel("bko2 tables/orth t test table.xlsx")
+write_csv(orth_Ttests, file = "bko2 tables/orth t test table.csv")
 ```
 
 

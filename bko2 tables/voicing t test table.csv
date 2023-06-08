@@ -1,0 +1,7 @@
+"","Estimate","Std. Error","z value","P.vals"
+"Range6 to 8:voicingunvoiced",-0.1562,0.1284,-1.2167,1
+"Range9 to 11:voicingunvoiced",-0.0664,0.1304,-0.5092,1
+"RangeAdult:voicingunvoiced",-0.2398,0.1305,-1.8366,0.3976
+"Range6 to 8:voicingvoiced",0.1171,0.1283,0.9129,1
+"Range9 to 11:voicingvoiced",0.0812,0.1304,0.6225,1
+"RangeAdult:voicingvoiced",0.752,0.1363,5.5186,0
