@@ -148,13 +148,13 @@ for(file in rds_files){
   
   
   
-  #file_path_bk <- paste0("LG CSV files Looped/",file_id,"_bk.csv")
+  file_path_bk <- paste0("LG_DI_five_bk_csv/",file_id,"_bk.csv")
   file_path_lg <- paste0("LG_DI_five_csv/",file_id,"_lg.csv")
   
   #file_path_prac <- paste0("LG practice trials/",file_id,".csv")
   #write.csv(data_prac, file_path_prac)
   
-  #write.csv(data_exp_bk, file_path_bk) 
+  write.csv(data_exp_bk, file_path_bk) 
   write.csv(data_exp_lg, file_path_lg)
   
 }
@@ -186,10 +186,43 @@ for(i in 1:length(all_files)){
   }
 }
 
-unique(LG_data_df$ID) #at 101 June 5
+#unique(LG_data_df$ID) #at 101 June 5
 ```
 
-#create large df
+#create bk df
+```{r}
+all_files <- list.files("LG_DI_five_bk_csv")
+first_file <- TRUE
+
+#Adds ID code onto each trial, binds all individual csvs into one large dataframe
+for(i in 1:length(all_files)){
+  if(grepl("lg",all_files[i])){
+    print(all_files[i])
+    if(first_file){
+      BK_data_df <- read.csv(paste0("LG_DI_five_bk_csv/",all_files[i]))
+      BK_data_df <- BK_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      first_file <- FALSE
+    }
+    else{
+      BKnew_data_df <- read.csv(paste0("LG_DI_five_bk_csv/",all_files[i]))
+      BKnew_data_df <- BKnew_data_df %>% mutate(ID = substr(all_files[i],1,6))
+      BK_data_df <- rbind(BK_data_df,BKnew_data_df)
+    }
+  }
+}
+
+#unique(LG_data_df$ID) #at 101 June 5
+
+#first create a new column shape_choice that has a 1 if they chose round, 0 if they chose spiky
+BK_data_df <- BK_data_df %>% mutate(shape_choice = ifelse(grepl("bouba",left_image)  & response == left_key,
+                                                         1,
+                                                         ifelse(grepl("bouba",right_image)  & response == right_key, 1,
+                                                         0))) 
+```
+
+
+
+#lg create large df
 ```{r}
 #load in the tables of targets and pairs descriptions
 target_table <- read_excel("LG_target_table.xlsx")
@@ -234,6 +267,14 @@ trial_counts <- LG_data_df_combined_bias %>% group_by(ID) %>%
                                       sd = sd(trial_counts),
                                       se = sd/sqrt(n()))
 #23.74257 average
+
+trial_counts_bk <- BK_data_df %>% group_by(ID) %>%
+                               summarize(trial_counts = n()) %>%
+                                ungroup() %>%
+                              summarize(mean = mean(trial_counts),
+                                      sd = sd(trial_counts),
+                                      se = sd/sqrt(n()))
+#31.76238 average
 ```
 
 new calculation: sum(global)-sum(local)
@@ -241,8 +282,8 @@ new calculation: sum(global)-sum(local)
 need to group_by(ID, choice)
 
 ```{r}
-LG_data_df_combined_bias %>% group_by(ID) %>% count(choice)
-
+#creates a count of g - l responses, puts them into categories based on what the end number is (local or global group)
+#one row per participant
 LG_count <-LG_data_df_combined_bias %>% group_by(ID) %>% count(choice)
 LG_count_p <- LG_count %>% pivot_wider(names_from = choice, values_from = n) %>% mutate_all(~replace(., is.na(.), 0))
 #new column with local-global
@@ -278,9 +319,6 @@ LG_bias_poirel <- LG_poirel_all %>% group_by(ID,Range, LG_group) %>%
                                     n = n(),
                                     se_bias=sd_bias/sqrt(n())) %>% ungroup()
 
-LG_bias_poirel_one_row <- LG_poirel_all %>% group_by(ID,Range, LG_group) %>%
-                                      summarise(GminusL = mean(GminusL))
-
 
 
 
@@ -294,8 +332,9 @@ LG_poirel_points <- LG_poirel_all  %>% group_by(ID,Range, LG_group) %>%
 LG_group_count <- LG_poirel_all %>% group_by(Range, LG_group) %>% summarise(
                                                            count = length(unique(ID)))
 
-LG_group_count_p <- full_join(LG_group_count, LG_bias_data, by="Range")
 #proportion = number in l/g group divided by total N participants in age range #######################
+
+LG_group_count_p <- full_join(LG_group_count, LG_bias_data, by="Range")
 LG_group_count_p <- LG_group_count_p %>% mutate(proportion = count/N)
 
 
@@ -310,7 +349,7 @@ LG_weighted_avg <- LG_poirel_all %>% group_by(ID,Range) %>%
                                               N = n()) %>% ungroup()
 
 #make one data set with one row for each participant
-LG_average_gminusl <- LG_poirel_all %>% group_by(ID,Range) %>%
+LG_bias_poirel_one_row <- LG_poirel_all %>% group_by(ID,Range, LG_group) %>%
                                       summarise(GminusL = mean(GminusL))
 
 ```
@@ -342,10 +381,8 @@ Anova(lgm1)
 # none are different from zero
 
 
-#are they different from each other?
+#are they different from each other? no
 contrast(emmeans(lgm1, ~ Range) , method = "pairwise", type = "response")
-
-
 
 #lg_bias_table <-summary.glm(m1)$coefficients
 #write.csv(bko1_bias_table, "significance tables/bko1_bias_table.csv")
@@ -377,8 +414,6 @@ Testing only the first half of trials for LG
 slice only the top 12 rows for each participant
 ```{r}
 #LG_data_df_combined_bias has all trials for each participant
-
-
 LG_count <-LG_data_df_combined_bias %>% group_by(ID) %>% count(choice)
 LG_count_p <- LG_count %>% pivot_wider(names_from = choice, values_from = n) %>% mutate_all(~replace(., is.na(.), 0))
 #new column with local-global
@@ -470,7 +505,6 @@ ICtab(lgm_mult, lgm_add)
 Anova(lgm_add)
 
 contrast(emmeans(lgm_mult, ~ Range | LG_group) , method = "pairwise", type = "response")
-bko1_range_difference_table <-contrast(emmeans(lgm_mult, ~ Range | LG_group) , method = "pairwise", type = "response")
 ```
 analysis how to tell if the averages are different from each other
 

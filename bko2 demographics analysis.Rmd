@@ -97,6 +97,8 @@ Anova(glm_bilingual)
 glm_race <- glmer(WJ_score ~ Race + (1|ID), data = all_data_df_racesimple, family="poisson")
 Anova(glm_race)
 #race numbers are not even, so not sure if we will report this, too skewed 
+
+
 ```
 
 So far we didn't find any demographic measure had a significant effect on shape choice or WJ score. This means we can collapse across these variables and don't have to take them into account for our larder analyses. 

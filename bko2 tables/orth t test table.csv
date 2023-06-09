@@ -1,9 +1,9 @@
 Group,Estimate,Std. Error,z value,P.vals
 Angular sounds,,,,
-soundcurved:Range6 to 8,0.3313,0.1313,2.5245,0.0695
-soundcurved:Range9 to 11,0.5648,0.1361,4.1499,<.0001
-soundangular:RangeAdult,-1.374,0.1814,-7.5752,<.0001
-Curved sounds,,,,
 soundangular:Range6 to 8,-0.6253,0.1585,-3.9445,<.0001
 soundangular:Range9 to 11,-0.9404,0.1665,-5.6496,<.0001
+soundangular:RangeAdult,-1.374,0.1814,-7.5752,<.0001
+Curved sounds,,,,
+soundcurved:Range6 to 8,0.3313,0.1313,2.5245,0.0695
+soundcurved:Range9 to 11,0.5648,0.1361,4.1499,<.0001
 soundcurved:RangeAdult,1.241,0.1476,8.407,<.0001

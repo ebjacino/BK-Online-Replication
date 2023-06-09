@@ -425,7 +425,7 @@ m_mult <- glmer(shape_choice ~ Range*sound + (1|ID), data = all_data_df, family 
 Anova(m_mult)
 
 ## |> is a pipe operator in version 4.1, passes to confint() to calculate
-contrast(emmeans(m_mult, ~ Range | sound), method = "pairwise", type = "response") |> confint()
+contrast(emmeans(m_mult, ~ Range | sound), method = "pairwise", type = "response") #|> confint()
 
 
 bko2_orth_contrast_table <-contrast(emmeans(m_mult, ~ Range | sound) , method = "pairwise", type = "response")
@@ -437,13 +437,22 @@ bko2_orth_contrast_table <- bko2_orth_contrast_table %>% mutate(
                                         
 
 #odds ratio is the effect size- if there is no difference the odds ratio is equal to 1, no effect. If it's farther from 1 in either direction it's more significant
-library(xlsx)
-write.csv(bko2_orth_contrast_table, file = "bko2 tables/orth contrast.xlsx")
+#write.csv(bko2_orth_contrast_table, file = "bko2 tables/orth contrast.xlsx")
 ```
 
 #orthography IS THERE A SIGNIFICANT DIFFERENCE FROM 0?
  you want to see if every group is different from zero, and so you want a model that just looks at the smallest groups (each sound for each age group), with none of the big groupings. that’s why you just look at the interaction, not sound*range. This is doing those 6 individual t tests
 ```{r}
+#checking 
+age_group <- all_data_df %>% filter(Range == "6 to 8") %>% filter(sound == "curved")
+# One-sample t-test
+res <- t.test(age_group$shape_choice, mu = 0.5)
+# Printing the results: significantly different from zero
+logit(res$estimate) 
+
+
+
+
 #sound:Range gets you the interaction term, which is the difference from 0 for each stimulus for each age range
 stim_o <- glmer(shape_choice ~ 0 + sound:Range + (1|ID), data = all_data_df, family = binomial)
 summary(stim_o)
@@ -473,18 +482,16 @@ Corrected_orth
 orth_Ttests <- as.data.frame(orth_summary$coefficients) 
 
 #making a table with the corrected p values
-orth_Ttests <- orth_Ttests %>% mutate(P.vals = Corrected_orth$p_val_print,
+orth_Ttests <- orth_Ttests %>% mutate(categories = row.names(orth_summary$coefficients),
+                                      P.vals = Corrected_orth$p_val_print,
                                       P.vals = as.numeric(P.vals),
                                       P.vals = round(P.vals, digits = 4),
                                       Estimate = round(Estimate, digits = 4),
                                       `Std. Error` = round(`Std. Error`, digits = 4),
                                       `z value` = round(`z value`, digits = 4)) %>%
-                              dplyr::select(!"Pr(>|z|)")
-write.xlsx(bko2_orth_contrast_table, file = "bko2 tables/orth contrast.xlsx")
+                                      dplyr::select(!"Pr(>|z|)")
 
-df1.to_excel("output.xlsx")  
-orth_Ttests.to_excel("bko2 tables/orth t test table.xlsx")
-write_csv(orth_Ttests, file = "bko2 tables/orth t test table.csv")
+#write_csv(orth_Ttests, file = "bko2 tables/orth t test table.csv")
 ```
 
 
@@ -533,7 +540,7 @@ congruency_plot_new <- ggplot(data_congruency, aes(x = congruent, y = bias)) +
 congruency_plot_new
 #ggsave("graphs/2023 poster/congruency plot.png", height = 3.5, width = 5.5)
 ```
-analysis
+#congruency analysis
 how to tell if the age groups are different from each other
 
 ```{r}
@@ -548,16 +555,7 @@ Anova(m_mult_c)
 
 contrast(emmeans(m_mult_c, ~ Range | congruent) , method = "pairwise", type = "response") %>% confint()
 
-bko2_congruency_contrast <-contrast(emmeans(m_mult_c, ~ Range | congruent) , method = "pairwise", type = "response")
-bko2_congruency_contrast <- as.data.frame(bko2_congruency_contrast)
-bko2_congruency_contrast <- bko2_congruency_contrast %>% mutate(
-                                        p.value = round(p.value,digits = 3),
-                                        z.ratio = round(z.ratio, digits = 3)) %>%
-                                        dplyr::select(!c(df,null))
-                                        
 
-#odds ratio is the effect size- if there is no difference the odds ratio is equal to 1, no effect. If it's farther from 1 in either direction it's more significant
-write.xlsx(bko2_congruency_contrast, file = "bko2 tables/congruency contrast.xlsx")
 ```
 
 analysis
@@ -569,9 +567,22 @@ summary(congruency_i)
 
 Anova(congruency_i)
 
+
+
+
 #this will tell you what the differences are between congruent/incongruent for each age range
 contrast(emmeans(congruency_i, ~ congruent | Range) , method = "pairwise", type = "response") #order of terms matters here, difference in congruent for each age range
 
+bko2_congruency_contrast <-contrast(emmeans(congruency_i, ~ congruent | Range) , method = "pairwise", type = "response")
+bko2_congruency_contrast <- as.data.frame(bko2_congruency_contrast)
+bko2_congruency_contrast <- bko2_congruency_contrast %>% mutate(
+                                        p.value = round(p.value,digits = 3),
+                                        z.ratio = round(z.ratio, digits = 3)) %>%
+                                        dplyr::select(!c(df,null))
+                                        
+
+#odds ratio is the effect size- if there is no difference the odds ratio is equal to 1, no effect. If it's farther from 1 in either direction it's more significant
+write.csv(bko2_congruency_contrast, file = "bko2 tables/congruency contrast.csv")
 ```
 
 #GRAPH FOR VOWEL TYPE
@@ -659,18 +670,21 @@ vowel_summary <- summary(stim_v)
 Corrected_v <- tibble(categories = row.names(summary(stim_v)$coefficients),
                          p_vals = p.adjust(summary(stim_v)$coefficients[,4], method = "bonferroni", n = 2*3),
                          p_val_print = sprintf("%.10f", p_vals))
-Corrected_v
+view(Corrected_v)
 
 vowel_Ttests <- as.data.frame(vowel_summary$coefficients) 
 
 #making a table with the corrected p values
-vowel_Ttests <- vowel_Ttests %>% mutate(P.vals = Corrected_v$p_val_print,
+vowel_Ttests <- vowel_Ttests %>% mutate(categories = row.names(vowel_summary$coefficients),
+                                      P.vals = Corrected_v$p_val_print,
                                       P.vals = as.numeric(P.vals),
                                       P.vals = round(P.vals, digits = 4),
                                       Estimate = round(Estimate, digits = 4),
                                       `Std. Error` = round(`Std. Error`, digits = 4),
                                       `z value` = round(`z value`, digits = 4)) %>%
                               dplyr::select(!"Pr(>|z|)")
+
+#write_csv(vowel_Ttests, file = "bko2 tables/vowel t test table.csv")
 ```
 
 # GRAPH FOR CONSONANT VOICING
@@ -771,6 +785,8 @@ voicing_Ttests <- voicing_Ttests %>% mutate(P.vals = Corrected_cv$p_val_print,
                                       `Std. Error` = round(`Std. Error`, digits = 4),
                                       `z value` = round(`z value`, digits = 4)) %>%
                               dplyr::select(!"Pr(>|z|)")
+
+#write.csv(voicing_Ttests, file = "bko2 tables/voicing t test table.csv")
 ```
 
 #consonant graph 
@@ -882,6 +898,7 @@ consonant_Ttests <- consonant_Ttests %>% mutate(P.vals = Corrected_ct$p_val_prin
                                       `Std. Error` = round(`Std. Error`, digits = 4),
                                       `z value` = round(`z value`, digits = 4)) %>%
                               dplyr::select(!"Pr(>|z|)")
+#write.csv(consonant_Ttests, file = "bko2 tables/consonant type t test table.csv")
 ```
 
 
@@ -1036,9 +1053,8 @@ ICC(ICC_data)
 
 model <- glmer(correct ~ Range * (sound +voicing + congruent + vowel_type + consonant_type) + (1|ID), data = all_data_df, family = "binomial")
 Anova(model)
+summary(model)
 
-model2 <- glmer(correct ~ Range * sound *voicing * congruent * vowel_type * consonant_type + (1|ID), data = all_data_df, family = "binomial")
-Anova(model2)
-#This model fails to converge, too many categories that are too overlapping 
+
 ```
 
