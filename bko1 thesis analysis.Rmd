@@ -16,6 +16,7 @@ library(ggpubr)
 library(lme4)       #for glmer
 library(car)        # for Anova()
 library(emmeans)
+library(report)
 
 
 
@@ -150,11 +151,11 @@ for(file in rds_files){
   file_path_bk <- paste0("LG_DI_five_bk_csv/",file_id,"_bk.csv")
   file_path_lg <- paste0("LG_DI_five_csv/",file_id,"_lg.csv")
   
-  #file_path_prac <- paste0("LG practice trials/",file_id,".csv")
+  file_path_prac <- paste0("LG practice trials/",file_id,".csv")
   #write.csv(data_prac, file_path_prac)
   
-  write.csv(data_exp_bk, file_path_bk) 
-  write.csv(data_exp_lg, file_path_lg)
+  #write.csv(data_exp_bk, file_path_bk) 
+  #write.csv(data_exp_lg, file_path_lg)
   
 }
 
@@ -292,6 +293,12 @@ LG_data_df_combined_bias <- LG_data_df_combined_bias %>% filter(!is.na(choice))
 LG_data_df_combined_bias <- LG_data_df_combined_bias %>% mutate(choice_number = ifelse(choice == "global", 1, 0)) %>%
                             filter(!is.na(choice))
 
+
+# deletes the second half of adults we ran to get the dataset to 25 instead of 41
+lglast_half_adults <- unique((LG_data_df_combined_bias %>% filter( Range == "Adult"))$ID)[26:41]
+
+LG_data_df_combined_bias <- LG_data_df_combined_bias %>% filter(!ID %in% lglast_half_adults)
+
 #write.csv(LG_data_df_combined_bias, "significance tables/full data set.csv")
 ```
 
@@ -421,6 +428,7 @@ LG_poirel_plot2
 lgm1 <- glm(GminusL ~ 0 + Range, data = LG_bias_poirel_one_row)
 summary(lgm1)
 Anova(lgm1)
+report(lgm1)
 # none are different from zero
 
 
@@ -443,9 +451,10 @@ Is there a significant change in the proportion of L to G participants with age?
 ```{r}
 LG_bias_poirel_one_row <- LG_bias_poirel_one_row %>% mutate(LG_group_bi = ifelse(LG_group == "local", 1,0))
 
-lgm1 <- glm(LG_group_bi ~ 0 + Range, data = LG_bias_poirel_one_row, family = binomial)
-summary(lgm1)
-Anova(lgm1)
+lgm2 <- glm(LG_group_bi ~ 0 + Range, data = LG_bias_poirel_one_row, family = binomial)
+summary(lgm2)
+Anova(lgm2)
+report(lgm2)
 #Run the Anova- Age Range does not affect the probability of being local or global
 
 ```
@@ -453,6 +462,7 @@ Anova(lgm1)
 ```{r}
 #combining datasets. This will make one dataset of 20 adults, 17 online participants from bklg and 3 online participants from bko
 rep_ages <- read_excel("bk rep ages.xlsx")
+bk_version <- read_xlsx("bko1 version.xlsx")
 
 bk_data_combined <- full_join(bk_data_df,age_table, by="ID")
 bk_rep_df <- full_join(bk_rep_df,rep_ages, by="ID")
@@ -512,19 +522,20 @@ bk_rep_plot
 ```{r}
 #Different from zero?
 #sound:Range gets you the interaction term, which is the difference from 0 for each stimulus for each age range
-bk_m1 <- glmer(shape_choice ~ 0 + sound:Range + (1|ID), data = bk_data_combined, family = binomial)
-summary(bk_m1)
-bk_summary<- summary(bk_m1)
+bk_r_m1 <- glmer(shape_choice ~ 0 + sound:Range + (1|ID), data = bk_rep_df_combined_full, family = binomial)
+summary(bk_r_m1)
+report(bk_r_m1)
+bk_summary<- summary(bk_r_m1)
 
 
-Corrected_bk <- tibble(categories = row.names(summary(bk_m1)$coefficients),
-                         p_vals = p.adjust(summary(bk_m1)$coefficients[,4], method = "bonferroni", n = 2*4),
+Corrected_bk <- tibble(categories = row.names(summary(bk_r_m1)$coefficients),
+                         p_vals = p.adjust(summary(bk_r_m1)$coefficients[,4], method = "bonferroni", n = 2*4),
                          p_val_print = sprintf("%.10f", p_vals))
 
-bk_tests <- as.data.frame(bk_summary$coefficients) 
+rep_bk_tests <- as.data.frame(bk_summary$coefficients) 
 
 #making a table with the corrected p values
-bk_tests <- bk_tests %>% mutate(categories = row.names(bk_summary$coefficients),
+rep_bk_tests <- rep_bk_tests %>% mutate(categories = row.names(bk_summary$coefficients),
                                       P.vals = Corrected_bk$p_val_print,
                                       P.vals = as.numeric(P.vals),
                                       P.vals = round(P.vals, digits = 4),
@@ -534,14 +545,15 @@ bk_tests <- bk_tests %>% mutate(categories = row.names(bk_summary$coefficients),
                                       dplyr::select(!"Pr(>|z|)")
 
 #turn bk_tests into a table
-bk_bias_tests <- write.csv(bk_tests, file = "bko1 tables/bk tests.csv")
+rep_bk_bias_tests <- write.csv(rep_bk_tests, file = "bko1 tables/replication bk tests.csv")
 
 #difference between age groups?
 #by range. mixed effect binary model
-bk_m2 <- glmer(shape_choice ~ Range*sound + (1|ID), data = bk_data_combined, family = "binomial")
+bk_m2 <- glmer(shape_choice ~ Range*sound + (1|ID), data = bk_rep_df_combined_full, family = "binomial")
 #trying to find the model that best fits the data with the least number of terms. not over or under fit to the data. 
 
 Anova(bk_m2)
+report(bk_m2)
 
 ## |> is a pipe operator in version 4.1, passes to confint() to calculate
 contrast(emmeans(bk_m2, ~ Range | sound), method = "pairwise", type = "response") #|> confint()
@@ -554,7 +566,7 @@ bk_contrast_table <- bk_contrast_table %>% mutate(
                                         z.ratio = round(z.ratio, digits = 3)) %>%
                                         dplyr::select(!c(df,null))
                                         
-bk_bias_contrasts <- write.csv(bk_tests, file = "bko1 tables/bk contrasts.csv")
+bk_bias_contrasts <- write.csv(bk_tests, file = "bko1 tables/replications bk contrasts.csv")
 
 #odds ratio is the effect size- if there is no difference the odds ratio is equal to 1, no effect. If it's farther from 1 in either direction it's more significant
 ```
@@ -569,7 +581,7 @@ bk_data_combined <- bk_data_combined %>% filter(!Range =="5")
 # deletes the second half of adults we ran to get the dataset to 25 instead of 41
 last_half_adults <- unique((bk_data_combined %>% filter( Range == "Adult"))$ID)[26:41]
 
-bk_data_combined <- bk_data_combined %>% filter(!ID %in% first_25_adults)
+bk_data_combined <- bk_data_combined %>% filter(!ID %in% last_half_adults)
 
 bk_count <- bk_data_combined %>% group_by(ID) %>% summarise(bias = sum(shape_choice)/n() - 0.5)
 
@@ -608,27 +620,7 @@ bk_overall <- ggplot() +
 
 bk_overall
 ```
-#GRAPH
 
-```{r}
-bk_overall <- ggplot() +
-  geom_col(bk_bias_data, mapping = aes(x = sound, y = mean_bias), color = "black", fill = NA) +
-  geom_point(bk_bias_data_points, mapping =aes(x = sound, y = bias_round, size = Count, color= sound)) +
-  geom_col(bk_bias_data, mapping = aes(x = sound, y = mean_bias, fill = sound), alpha = 0.5) +
-  geom_errorbar(bk_bias_data, mapping = aes(x = sound, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
-  scale_fill_manual(values = c(angular_color,curved_color)) +
-  scale_color_manual(values = c(angular_color,curved_color)) +
-  theme_light() +
-  ylim(-0.5,0.5) +
-  ylab("Choice bias in expected direction") +
-  xlab("Auditory stimulus") +
-  facet_wrap("Range")+
-  theme(strip.background =element_rect(fill="white"))+
-  theme(strip.text = element_text(colour = 'black'))
-
-bk_overall
-#ggsave("graphs/thesis graphs/bk_overall.png", width = 10, height = 5)
-```
 #bk analyses
 ```{r}
 #Different from zero?
@@ -681,28 +673,10 @@ bk_bias_contrasts <- write.csv(bk_tests, file = "bko1 tables/bk contrasts.csv")
 ```
 #checking in person and online presentation differences
 ```{r}
-bk_version <- read_xlsx("bko1 version.xlsx")
-bk_df_version <- bk_data_combined %>% filter(Range == "Adult")
-bk_df_version <- bk_df_version %>% full_join(bk_version,bk_df_version, by = "ID")
-
-bk_df_version_count <- bk_df_version %>% group_by(version,sound,Range,ID) %>% 
-  summarise(bias = sum(shape_choice)/n() - 0.5) %>%
-  group_by(sound, version, Range) %>%
-  summarise(mean_bias = mean(bias),
-            count = n())
 
 
                                                         
 ```
-bk_bias_data <- bk_data_combined %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
-                                      group_by(ID,sound,Range) %>% 
-                                      summarise(bias = sum(shape_choice)/n() - 0.5) %>% 
-                                      group_by(sound,Range) %>%
-                                      summarize(mean_bias = mean(bias),
-                                                sd_bias = sd(bias),
-                                                se_bias=sd_bias/sqrt(n()),
-                                                N = n()) %>%
-                                      ungroup() 
 
 #comparing bk choice bias to LG bias
 use bias scores (GminusL) from LG poirel with 5 yo.R markdown
@@ -711,26 +685,28 @@ is there a correlation between your group (local or global group) and your BK bi
 #make a new dataframe with the following columns for each ID: round/spiky bias scores, GminusL scores, LG_group assignment
 LG_score_only <- LG_bias_poirel_one_row %>% dplyr::select(ID, Range, GminusL, LG_group) 
 #run this below again to include the 5 year olds again
-bk_data_combined <- full_join(bk_data_df,age_table, by="ID")
+bk_data_combined <- full_join(bk_data_df,age_table, by="ID") %>% na.omit
 
 #what should be calculated??? sum correct, or sum shape choice? shape choice to keep it simple, doens't make a difference
 BK_bias_only <- bk_data_combined %>% group_by(ID) %>%
                   mutate(total_bk_bias = sum(shape_choice)/n()-.5) %>% dplyr::select(ID, total_bk_bias)  %>%
-                filter(row_number()==1)
+                filter(row_number()==1) %>% na.omit
 
-BK_LG_scores <- full_join(LG_score_only, BK_bias_only, by="ID")
+BK_LG_scores <- full_join(LG_score_only, BK_bias_only, by="ID")%>% na.omit
 
 #pearson's correlation 
 #make sure the midpoints on each axis is at chance
 
 
-cor.test(BK_LG_scores$GminusL, BK_LG_scores$total_bk_bias, method = "pearson")
+cor.test <- cor.test(BK_LG_scores$GminusL, BK_LG_scores$total_bk_bias, method = "pearson")
+report(cor.test)
 #p-value = 0.50
 
 #5 year olds only?
 BK_LG_scores_5 <- BK_LG_scores %>% filter(Range == "5")
-cor.test(BK_LG_scores_5$GminusL, BK_LG_scores_5$total_bk_bias, method = "pearson")
+cor.test_5 <-cor.test(BK_LG_scores_5$GminusL, BK_LG_scores_5$total_bk_bias, method = "pearson")
 #= 0.2555
+report(cor.test_5)
 
 cor_plot <-  ggplot(BK_LG_scores, aes(GminusL, total_bk_bias))
 cor_plot + geom_point() +
@@ -827,8 +803,8 @@ res1 #results are nonsignificant, p = 0.9935
 #this has M and SD for boas for confounded and nonconfounded
 LG_confound_grouped <- LG_confound_global_bias   %>%
   group_by(target_confound, Range) %>%
-  summarise(mean_bias = mean(globa_bias),
-            sd_bias = sd(globa_bias),
+  summarise(mean_bias = mean(global_bias),
+            sd_bias = sd(global_bias),
             se_bias=sd_bias/sqrt(n()))
 ```
 #confound diff between experiments
@@ -837,12 +813,13 @@ LG_confound_grouped <- LG_confound_global_bias   %>%
 #make confound df first
 LG_confound_average_gb <- LG_data_df_combined_bias_c %>% group_by(ID, Range) %>% 
                           summarise(global_bias = sum(choice_number)/n()) %>% mutate(type = 1)
-#now the regular ones
+#now the regular ones, first half of adults up to bld149
 LG_average_gb <- LG_data_df_combined_bias %>% group_by(ID, Range) %>% 
                           summarise(global_bias = sum(choice_number)/n()) %>% filter(Range %in% c("6 to 8", "Adult")) %>%
                           mutate(type = 0)
 
 LG_con_and_noncon <- rbind(LG_confound_average_gb,LG_average_gb)
+unique(LG_con_and_noncon$ID)
 
 #does age range or if you saw the confound trials or not 
 con_mod <- aov(global_bias ~ Range*type, data = LG_con_and_noncon)

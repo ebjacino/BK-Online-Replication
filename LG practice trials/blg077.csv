@@ -1,0 +1,5 @@
+"","trial_type","stimulus","response","left_image","right_image","correct_response","correct"
+"1","bouba-kiki","PracSounds/1.wav","z","[""PracImgs/1.png""]","[""PracImgs/4.png""]","z","true"
+"2","bouba-kiki","PracSounds/6.wav","m","[""PracImgs/5.png""]","[""PracImgs/6.png""]","m","true"
+"3","bouba-kiki","PracSounds/8.wav","z","[""PracImgs/8.png""]","[""PracImgs/3.png""]","z","true"
+"4","bouba-kiki","PracSounds/2.wav","z","[""PracImgs/2.png""]","[""PracImgs/7.png""]","z","true"
