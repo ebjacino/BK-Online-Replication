@@ -186,7 +186,7 @@ for(i in 1:length(all_files)){
   }
 }
 
-#unique(LG_data_df$ID) #at 101 June 5
+#LG_list<- as.data.frame(unique(LG_data_df$ID)) #at 101 June 5
 ```
 
 #create bk df
@@ -212,7 +212,7 @@ for(i in 1:length(all_files)){
   }
 }
 
-#unique(LG_data_df$ID) #at 101 June 5
+#BK_list<- as.data.frame(unique(bk_data_df$ID)) #at 101 June 5
 
 #first create a new column shape_choice that has a 1 if they chose round, 0 if they chose spiky
 bk_data_df <- bk_data_df %>% mutate(shape_choice = ifelse(grepl("bouba",left_image)  & response == left_key,
@@ -248,7 +248,7 @@ for(i in 1:length(all_files)){
   }
 }
 
-#unique(LG_data_df$ID) #at 101 June 5
+#rep_bk_list<- as.data.frame(unique(bk_rep_df$ID)) #at 101 June 5
 
 #first create a new column shape_choice that has a 1 if they chose round, 0 if they chose spiky
 bk_rep_df <- bk_rep_df %>% mutate(shape_choice = ifelse(grepl("bouba",left_image)  & response == left_key,
@@ -458,6 +458,49 @@ report(lgm2)
 #Run the Anova- Age Range does not affect the probability of being local or global
 
 ```
+#number of local elements?
+When target_number 6 or 9, it's many, and when it's 3 or 4, it's few
+```{r}
+#creates a count of g - l responses, puts them into categories based on what the end number is (local or global group)
+#one row per participant
+LG_data_df_combined_bias_summed_targ <- LG_data_df_combined_bias %>% mutate(targ_summed = ifelse(target_number <5, "3-4", "6-9"))
+
+LG_targ_number_count <-LG_data_df_combined_bias_summed_targ %>% group_by(ID,targ_summed,Range) %>% summarise(global_bias = sum(choice_number)/n())
+
+#average values!! average of GminusL for each age range################
+LG_number_bias <- LG_data_df_combined_bias_summed_targ %>% group_by(ID,Range,targ_summed) %>%
+                                      summarise(bias = sum(choice_number)/n()) %>%
+                                    ungroup() %>%
+                                    group_by(Range,targ_summed) %>%
+                                    summarise(mean_bias = mean(bias),
+                                              sd_bias = sd(bias, na.rm = TRUE),
+                                              se_bias=sd_bias/sqrt(n()), 
+                                              N = n()) %>% ungroup()
+                                    
+
+
+
+
+
+bk_num_plot <- ggplot() +
+  geom_col(LG_number_bias, mapping = aes(x = targ_summed, y = mean_bias), color = "black", fill = NA) +
+  #geom_point(bk_rep_bias_data_points, mapping =aes(x = targ_summed, y = bias_round, size = Count, color= targ_summed)) +
+  geom_col(LG_number_bias, mapping = aes(x = targ_summed, y = mean_bias, fill = targ_summed), alpha = 0.5) +
+  geom_errorbar(LG_number_bias, mapping = aes(x = targ_summed, y = mean_bias, ymin = mean_bias-se_bias, ymax = mean_bias+se_bias), alpha = 1, width = 0.5) +
+  scale_fill_manual(values = c(angular_color,curved_color)) +
+  scale_color_manual(values = c(angular_color,curved_color)) +
+  theme_light() +
+  ylim(0,1) +
+  ylab("P of global responses") +
+  xlab("Number of local elements") +
+  facet_wrap("Range")+
+  theme(strip.background =element_rect(fill="white"))+
+  theme(strip.text = element_text(colour = 'black'))
+
+bk_num_plot
+```
+
+
 #replication graphing
 ```{r}
 #combining datasets. This will make one dataset of 20 adults, 17 online participants from bklg and 3 online participants from bko
@@ -478,9 +521,12 @@ unique(bk_adults_for_rep$ID)
 bk_rep_df_combined <- rbind(bk_adults_for_rep, bk_rep_df)
 unique(bk_rep_df_combined$ID) #now at 20
 
+
 #get a df that is bk_data_combined but only kids, then add it to bk_rep_df_combined
 bk_data_combined_kids <- bk_data_combined %>% filter(!Range =="Adult")
 bk_rep_df_combined_full <- rbind(bk_data_combined_kids, bk_rep_df_combined)
+
+rep_bk_list<- as.data.frame(unique(bk_rep_df_combined_full$ID)) #at  June 11
 
 
 bk_rep_bias_data <- bk_rep_df_combined_full %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
@@ -517,6 +563,7 @@ bk_rep_plot <- ggplot() +
   theme(strip.text = element_text(colour = 'black'))
 
 bk_rep_plot
+
 ```
 #replication analyses
 ```{r}
@@ -619,6 +666,8 @@ bk_overall <- ggplot() +
   theme(strip.text = element_text(colour = 'black'))
 
 bk_overall
+ggsave("graphs/thesis graphs/bko1 replication.png", height = 3.5, width = 6.5)
+
 ```
 
 #bk analyses
@@ -743,6 +792,7 @@ for(i in 1:length(all_files_c)){
 }
 
 unique(LG_data_df_c$ID) #36
+confound_list <- as.data.frame(unique(LG_data_df_c$ID))
 ```
 
 #confound df

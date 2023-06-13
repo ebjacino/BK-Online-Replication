@@ -1,7 +1,9 @@
-"","Estimate","Std. Error","z value","categories","P.vals"
-"soundround:Range6 to 8",0.6631,0.1484,4.4666,"soundround:Range6 to 8",1e-04
-"soundspiky:Range6 to 8",-0.5286,0.1468,-3.6014,"soundspiky:Range6 to 8",0.0025
-"soundround:Range9 to 11",1.0669,0.1425,7.4847,"soundround:Range9 to 11",0
-"soundspiky:Range9 to 11",-0.8036,0.1375,-5.8458,"soundspiky:Range9 to 11",0
-"soundround:RangeAdult",1.7732,0.1267,13.9928,"soundround:RangeAdult",0
-"soundspiky:RangeAdult",-1.7729,0.1267,-13.9967,"soundspiky:RangeAdult",0
+,Estimate,Std. Error,z value,categories,P.vals
+Round sounds,,,,,
+,0.6631,0.1484,4.4666,soundround:Range6 to 8,1.00E-04
+,-0.5286,0.1468,-3.6014,soundspiky:Range6 to 8,0.0025
+,1.0669,0.1425,7.4847,soundround:Range9 to 11,0
+Spiky sounds,,,,,
+,-0.8036,0.1375,-5.8458,soundspiky:Range9 to 11,0
+,1.7732,0.1267,13.9928,soundround:RangeAdult,0
+,-1.7729,0.1267,-13.9967,soundspiky:RangeAdult,0
