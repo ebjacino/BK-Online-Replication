@@ -1,7 +1,9 @@
-"","Estimate","Std. Error","z value","categories","P.vals"
-"soundround:Range6 to 8",0.67,0.1561,4.2928,"soundround:Range6 to 8",1e-04
-"soundspiky:Range6 to 8",-0.5311,0.1544,-3.4386,"soundspiky:Range6 to 8",0.0047
-"soundround:Range9 to 11",1.0743,0.1492,7.2014,"soundround:Range9 to 11",0
-"soundspiky:Range9 to 11",-0.8088,0.1443,-5.6052,"soundspiky:Range9 to 11",0
-"soundround:RangeAdult",1.9237,0.1943,9.899,"soundround:RangeAdult",0
-"soundspiky:RangeAdult",-1.951,0.1957,-9.9704,"soundspiky:RangeAdult",0
+,Estimate,Std. Error,z value,P.vals
+/Ba/ and /ga/ sounds,,,,
+6 to 8,0.67,0.1561,4.2928,1.00E-04
+9 to 11,1.0743,0.1492,7.2014,<.0001
+Adult,1.9237,0.1943,9.899,<.0001
+/ki/ and /ti/ sounds ,,,,
+6 to 8,-0.5311,0.1544,-3.4386,0.0047
+9 to 11,-0.8088,0.1443,-5.6052,<.0001
+Adult,-1.951,0.1957,-9.9704,<.0001

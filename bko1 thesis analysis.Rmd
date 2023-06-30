@@ -17,6 +17,7 @@ library(lme4)       #for glmer
 library(car)        # for Anova()
 library(emmeans)
 library(report)
+library(effectsize)
 
 
 
@@ -266,15 +267,16 @@ bk_rep_df <- bk_rep_df %>% mutate(shape_choice = ifelse(grepl("bouba",left_image
 #load in the tables of targets and pairs descriptions
 target_table <- read_excel("LG_target_table.xlsx")
 pairs_table <- read_excel("LG_pair_table.xlsx")
-age_table <- read_excel("LG_ages_5.xlsx")
-age_table <- age_table %>% mutate(ID = tolower(ID)) #%>% select(ID,Age,Range)
+#import sheet 2 of bko1 demographics
+
+LG_demographic_table <- bk_lg_demographics
 
 #full_join to combine
 LG_data_df_combined <- full_join(LG_data_df,target_table, by="image_ID_targets")
+LG_data_df_combined <- left_join(LG_demographic_table, LG_data_df_combined, by = "ID")
 #LG_data_df has no confound image IDs so they are populating as NAs
 LG_data_df_combined <- full_join(LG_data_df_combined,pairs_table, by="image_ID_pairs")%>%
   filter(!is.na(ID))
-LG_data_df_combined <- full_join(LG_data_df_combined,age_table, by="ID")
 #if the the global choice is on the left and they make the "z" response, then put G in the choice column, etc
 LG_data_df_combined_bias <- LG_data_df_combined %>% mutate(choice = ifelse(response_pairs == left_key &
                                                                              target_global == pair_left_global,
@@ -298,6 +300,8 @@ LG_data_df_combined_bias <- LG_data_df_combined_bias %>% mutate(choice_number = 
 lglast_half_adults <- unique((LG_data_df_combined_bias %>% filter( Range == "Adult"))$ID)[26:41]
 
 LG_data_df_combined_bias <- LG_data_df_combined_bias %>% filter(!ID %in% lglast_half_adults)
+LG_list<- as.data.frame(unique(LG_data_df_combined_bias$ID)) #at 101 June 5
+
 
 #write.csv(LG_data_df_combined_bias, "significance tables/full data set.csv")
 ```
@@ -334,11 +338,13 @@ LG_count_p <- LG_count %>% pivot_wider(names_from = choice, values_from = n) %>%
 #new column with local-global
 LG_count_p <- LG_count_p %>% mutate(GminusL = global-local) %>% mutate(LG_group = ifelse(GminusL >0, "global", "local"))
 
+
 ```
 adding the local-global value to the LG_data_df_combined_bias
 
 ```{r}
 LG_poirel_all <- full_join(LG_data_df_combined_bias, LG_count_p, by ="ID")
+#write.csv(LG_poirel_all, "full datasets/LG full dataset.csv")
 ```
 
 #graphing, by range
@@ -421,16 +427,110 @@ LG_poirel_plot2 <-ggplot() +
   ylab("<- local bias, global bias ->")
 
 LG_poirel_plot2
+
+####average GminusL for each age range
+LG_poirel_plotviolin <-ggplot() +
+  #geom_col(LG_weighted_avg, mapping = aes(x = Range, y = avg_bias), color = "black", fill = NA) +
+  geom_violin(LG_bias_poirel_one_row, mapping = aes(x = Range, y = GminusL, fill = Range), alpha = 0.5) +
+  #geom_errorbar(LG_weighted_avg, mapping = aes(x = Range, y = avg_bias, ymin = avg_bias-se_bias,
+                                              #ymax = avg_bias+se_bias), alpha = 1, width = .75) +
+  geom_point(LG_poirel_points, mapping = aes(x = Range, y = bias_round, size = Count, color = Range)) +
+  theme_light() +
+  ylab("Global Bias") +
+  #scale_color_manual(values = rev(cols)) +
+  #scale_fill_manual(values = rev(cols)) +
+  xlab("global and local groups in each age range") +
+  ylab("<- local bias, global bias ->")+
+  stat_summary(data = LG_bias_poirel_one_row,mapping = aes(x = Range, y = GminusL), 
+               fun.y  = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               colour = "black")
+
+LG_poirel_plotviolin
+
 ```
+#lg graph global bias
+```{r}
+#to count choice bias and see how many participants are in each age range
+LG_bias_data <- LG_data_df_combined_bias %>% group_by(ID,Range) %>% 
+                                    summarise(global_bias = sum(choice_number)/n()) %>% 
+                                    group_by(Range) %>%
+                                    summarize(mean_bias = mean(global_bias),
+                                    sd_bias = sd(global_bias),
+                                    se_bias=sd_bias/sqrt(n()),
+                                    N=n()) %>% ungroup()
+
+
+#calculating the points that go on the graph
+LG_points <- LG_data_df_combined_bias  %>% group_by(ID,Range) %>%
+                        summarise(global_bias = sum(choice_number)/n()) %>% 
+                        mutate(bias_round = round_any(global_bias,.25)) %>%  ungroup() %>%
+                        group_by(Range,bias_round) %>%
+                        summarise(Count = length(unique(ID)))
+
+####average GminusL for each age range
+LG_global_plot <-ggplot() +
+  geom_col(LG_bias_data, mapping = aes(x = Range, y = mean_bias), color = "black", fill = NA) +
+  geom_col(LG_bias_data, mapping = aes(x = Range, y = mean_bias, fill = Range), alpha = 0.5) +
+  geom_errorbar(LG_bias_data, mapping = aes(x = Range, y = mean_bias, ymin = mean_bias-se_bias,
+                                              ymax = mean_bias+se_bias), alpha = 1, width = .75) +
+  geom_point(LG_points, mapping = aes(x = Range, y = bias_round, size = Count, color = Range)) +
+  theme_light() +
+  ylab("Global Bias") +
+  #scale_color_manual(values = rev(cols)) +
+  #scale_fill_manual(values = rev(cols)) +
+  xlab("global and local groups in each age range") +
+  ylab("Proportion of global responses")
+
+LG_global_plot
+```
+#demographic analysis lg
+```{r}
+#make one data set with one row for each participant
+LG_demo_df <- full_join(LG_bias_poirel_one_row,LG_demographic_table, by= "ID")
+lg_demo_summedsex <- LG_demo_df %>% group_by(Sex) %>%
+                      summarise(avg = mean(GminusL), 
+                                sd = sd(GminusL),
+                                se=sd/sqrt(n()), 
+                                count = n())
+
+#sex for each age range?
+glm_sex <- glm(GminusL ~ Sex*Range.x, data = LG_demo_df)
+Anova(glm_sex)
+
+demosex <- t.test(GminusL ~ Sex, data = LG_demo_df)
+report(demosex)
+
+ggplot()+
+  geom_bar(lg_demo_summedsex,mapping = aes(x = Sex, y = avg), stat = "identity")+
+  theme_light()+
+  #facet_wrap("Range.x")+
+  geom_errorbar(lg_demo_summedsex, mapping = aes(x = Sex, y = avg, ymin = avg-se, ymax = avg+se), alpha = 1, width = 0.5) +
+  geom_jitter(LG_demo_df, mapping = aes(x = Sex, y = GminusL))+
+  ylab("<-local bias, global bias ->")
+
+#race for each age range?
+LG_demo_df <- LG_demo_df %>% mutate(Race = ifelse(Race == "White", "White", "nonWhite"))
+
+glm_race <- glm(GminusL ~ Race*Range.x, data = LG_demo_df)
+Anova(glm_race)
+
+```
+
+
 #analysis- are they different from 0? LG_poirel_plot2
 ```{r}
 #LG_bias_poirel_one_row
-lgm1 <- glm(GminusL ~ 0 + Range, data = LG_bias_poirel_one_row)
+lgm1 <- lm(GminusL ~ 0 + Range, data = LG_bias_poirel_one_row) #one way anova. IV is categorical not continuous
 summary(lgm1)
 Anova(lgm1)
 report(lgm1)
 # none are different from zero
+effectsize(lgm1) 
 
+
+plot(lgm1) #to see residuals
 
 #are they different from each other? no
 contrast(emmeans(lgm1, ~ Range) , method = "pairwise", type = "response")
@@ -439,22 +539,40 @@ contrast(emmeans(lgm1, ~ Range) , method = "pairwise", type = "response")
 #write.csv(bko1_bias_table, "significance tables/bko1_bias_table.csv")
 
 #t testing each of the 4 age groups from 0
-LG_bias_poirel_one_row %>% group_by(Range) %>%
+LG_bias_t_tests <- LG_bias_poirel_one_row %>% group_by(Range) %>%
                        summarise(t_val = t.test(GminusL, mu = 0)$statistic,
                                  df = t.test(GminusL, mu = 0)$parameter,
-                                 p_val = t.test(GminusL, mu = 0)$p.value)
+                                 p_val = t.test(GminusL, mu = 0)$p.value,
+                                 hedgg = hedges_g(GminusL ~ 1)$Hedges_g)
 
+LG_adults <- LG_bias_poirel_one_row %>% filter(Range == "Adult")
+test1 <- t.test(LG_adults$GminusL, mu = 0)
+test1
+hg <- hedges_g(test1)
+hg$Hedges_g
+
+hedges_g(GminusL ~ 1, data = LG_adults)
+effectsize(test1)
 
 ```
 
-Is there a significant change in the proportion of L to G participants with age?
+#Is there a significant change in the proportion of L to G participants with age?
 ```{r}
-LG_bias_poirel_one_row <- LG_bias_poirel_one_row %>% mutate(LG_group_bi = ifelse(LG_group == "local", 1,0))
+LG_bias_poirel_one_row_forgraph <- LG_bias_poirel_one_row %>% mutate(LG_group_bi = ifelse(LG_group == "local", 1,0))
 
-lgm2 <- glm(LG_group_bi ~ 0 + Range, data = LG_bias_poirel_one_row, family = binomial)
+lgm2 <- glm(LG_group_bi ~ 0 + Range, data = LG_bias_poirel_one_row_forgraph, family = binomial)
 summary(lgm2)
 Anova(lgm2)
-report(lgm2)
+effectsize(lgm2)
+
+ggplot(LG_bias_poirel_one_row_forgraph, aes(x = Range_Num, y = LG_group_bi, color = Range_Num))+
+  geom_jitter(height = 0)+
+  geom_smooth(formula = y ~ x, method="glm",
+    method.args=list(family="binomial"))+
+  theme_light()
+
+contrast(emmeans(lgm2, ~ Range) , method = "pairwise", type = "response")
+
 #Run the Anova- Age Range does not affect the probability of being local or global
 
 ```
@@ -498,38 +616,54 @@ bk_num_plot <- ggplot() +
   theme(strip.text = element_text(colour = 'black'))
 
 bk_num_plot
-```
 
+#analysis
+lgm_numberelements <- glm(global_bias ~ targ_summed *Range, data = LG_targ_number_count)
+Anova(lgm_numberelements)
+```
 
 #replication graphing
 ```{r}
 #combining datasets. This will make one dataset of 20 adults, 17 online participants from bklg and 3 online participants from bko
+#reload in demographics, sheet 1
 rep_ages <- read_excel("bk rep ages.xlsx")
 bk_version <- read_xlsx("bko1 version.xlsx")
+bk_rep_demo <- bko1_demographics
 
-bk_data_combined <- full_join(bk_data_df,age_table, by="ID")
-bk_rep_df <- full_join(bk_rep_df,rep_ages, by="ID")
-bk_data_combined <- bk_data_combined %>% filter(!Range =="5")
-bk_data_combined_adults <- bk_data_combined %>% filter(Range == "Adult")
+bk_data_version <- left_join(bk_version, bk_data_df, by = "ID") #left join will make it only have adults, since that's whats in bko1 version
+unique(bk_data_version$ID) #41
+bk_adults_for_rep <- bk_data_version %>% filter(version == "online")
+unique(bk_adults_for_rep$ID) #17
 
-bk_adults_for_rep <- full_join(bk_data_combined_adults, bk_version, by = "ID")
-bk_adults_for_rep <- bk_adults_for_rep %>% filter(version == "online")
 bk_adults_for_rep <- bk_adults_for_rep %>% dplyr::select(!"version")
-unique(bk_adults_for_rep$ID)
-#bk_adults_for_rep now has only the adults who were run online, now we need to add this to the 3 extra bko participants
-
 bk_rep_df_combined <- rbind(bk_adults_for_rep, bk_rep_df)
-unique(bk_rep_df_combined$ID) #now at 20
+bk_rep_df_combined <- na.omit(bk_rep_df_combined)
+unique(bk_rep_df_combined$ID) #now at 20, adults only
+
+#add in demo info to adult df
+bk_rep_adult_complete <- left_join(bk_rep_df_combined, bko1_demographics, by = "ID")
+unique(bk_rep_adult_complete$ID) #still at 20, adults only
+
+#not get the kids from bk_data_df
+bk_rep_data_combinedwithdemo <- left_join(bko1_demographics, bk_data_df, by = "ID")
+#select all but the kids (this df doesnt have the 3 extra adults bko)
+bk_rep_data_combinedwithdemo <- bk_rep_data_combinedwithdemo %>% filter(!Range == "Adult")
+unique(bk_rep_data_combinedwithdemo$ID) #39 kids
+
+bk_rep_data_combinedwithdemo <- rbind(bk_rep_data_combinedwithdemo, bk_rep_adult_complete)
+unique(bk_rep_data_combinedwithdemo$ID) #all 64
 
 
-#get a df that is bk_data_combined but only kids, then add it to bk_rep_df_combined
-bk_data_combined_kids <- bk_data_combined %>% filter(!Range =="Adult")
-bk_rep_df_combined_full <- rbind(bk_data_combined_kids, bk_rep_df_combined)
+rep_bk_list<- as.data.frame(unique(bk_rep_data_combinedwithdemo$ID)) #at 64 June 11
+#write.csv(bk_rep_data_combinedwithdemo, "full datasets/bk replication full dataset.csv")
 
-rep_bk_list<- as.data.frame(unique(bk_rep_df_combined_full$ID)) #at  June 11
+#by ID, not sound. not useful?
+bk_rep_ind <- bk_rep_data_combinedwithdemo %>% group_by(ID) %>%
+                  mutate(total_bk_bias = sum(shape_choice)/n()-.5) %>% dplyr::select(ID, total_bk_bias)  %>%
+                filter(row_number()==1) %>% na.omit
 
 
-bk_rep_bias_data <- bk_rep_df_combined_full %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+bk_rep_bias_data <- bk_rep_data_combinedwithdemo %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
                                       group_by(ID,sound,Range) %>% 
                                       summarise(bias = sum(shape_choice)/n() - 0.5) %>% 
                                       group_by(sound,Range) %>%
@@ -539,7 +673,7 @@ bk_rep_bias_data <- bk_rep_df_combined_full %>% mutate(stimulus = toupper(sub(".
                                                 N = n()) %>%
                                       ungroup() 
 
-bk_rep_bias_data_points <- bk_rep_df_combined_full %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
+bk_rep_bias_data_points <- bk_rep_data_combinedwithdemo %>% mutate(stimulus = toupper(sub(".wav","",sub("sound/","",stimulus)))) %>%
                                       group_by(ID,sound,Range) %>% 
                                       summarise(bias = sum(shape_choice)/n() - 0.5) %>% 
                                       ungroup() %>%
@@ -565,21 +699,36 @@ bk_rep_plot <- ggplot() +
 bk_rep_plot
 
 ```
+#replication demographics
+```{r}
+bk_rep_data_combinedwithdemo
+glm_sex <- glmer(shape_choice ~ Sex + (1|ID), data = bk_rep_data_combinedwithdemo, family = "binomial")
+Anova(glm_sex)
+
+bk_racesimple <- bk_rep_data_combinedwithdemo %>% mutate(Race = ifelse(Race == "White", "White", "nonWhite"))
+
+glm_race <- glmer(shape_choice ~ Race + (1|ID), data = bk_racesimple, family="poisson")
+Anova(glm_race)
+```
+
 #replication analyses
 ```{r}
 #Different from zero?
 #sound:Range gets you the interaction term, which is the difference from 0 for each stimulus for each age range
-bk_r_m1 <- glmer(shape_choice ~ 0 + sound:Range + (1|ID), data = bk_rep_df_combined_full, family = binomial)
+bk_r_m1 <- glmer(shape_choice ~ 0 + sound:Range + (1|ID), data = bk_rep_data_combinedwithdemo, family = binomial)
 summary(bk_r_m1)
 report(bk_r_m1)
 bk_summary<- summary(bk_r_m1)
+
+effectsize(bk_r_m1)
 
 
 Corrected_bk <- tibble(categories = row.names(summary(bk_r_m1)$coefficients),
                          p_vals = p.adjust(summary(bk_r_m1)$coefficients[,4], method = "bonferroni", n = 2*4),
                          p_val_print = sprintf("%.10f", p_vals))
 
-rep_bk_tests <- as.data.frame(bk_summary$coefficients) 
+#exp(bk_summary$coefficients)
+rep_bk_tests <- as.data.frame(bk_summary$coefficients)
 
 #making a table with the corrected p values
 rep_bk_tests <- rep_bk_tests %>% mutate(categories = row.names(bk_summary$coefficients),
@@ -596,7 +745,7 @@ rep_bk_bias_tests <- write.csv(rep_bk_tests, file = "bko1 tables/replication bk 
 
 #difference between age groups?
 #by range. mixed effect binary model
-bk_m2 <- glmer(shape_choice ~ Range*sound + (1|ID), data = bk_rep_df_combined_full, family = "binomial")
+bk_m2 <- glmer(shape_choice ~ Range*sound + (1|ID), data = bk_rep_data_combinedwithdemo, family = "binomial")
 #trying to find the model that best fits the data with the least number of terms. not over or under fit to the data. 
 
 Anova(bk_m2)
@@ -604,6 +753,9 @@ report(bk_m2)
 
 ## |> is a pipe operator in version 4.1, passes to confint() to calculate
 contrast(emmeans(bk_m2, ~ Range | sound), method = "pairwise", type = "response") #|> confint()
+contrast <- emmeans(bk_m2, ~ Range | sound)
+
+eff_size(contrast, sigma = sigma(bk_m2), edf = 124)
 
 
 bk_contrast_table <-contrast(emmeans(bk_m2, ~ Range | sound) , method = "pairwise", type = "response")
@@ -613,9 +765,7 @@ bk_contrast_table <- bk_contrast_table %>% mutate(
                                         z.ratio = round(z.ratio, digits = 3)) %>%
                                         dplyr::select(!c(df,null))
                                         
-bk_bias_contrasts <- write.csv(bk_tests, file = "bko1 tables/replications bk contrasts.csv")
-
-#odds ratio is the effect size- if there is no difference the odds ratio is equal to 1, no effect. If it's farther from 1 in either direction it's more significant
+bk_bias_contrasts <- write.csv(bk_contrast_table, file = "bko1 tables/replications bk contrasts.csv")
 ```
 
 
@@ -732,13 +882,15 @@ use bias scores (GminusL) from LG poirel with 5 yo.R markdown
 is there a correlation between your group (local or global group) and your BK bias score?
 ```{r}
 #make a new dataframe with the following columns for each ID: round/spiky bias scores, GminusL scores, LG_group assignment
+age_table <- read_excel("LG_ages_5.xlsx")
 LG_score_only <- LG_bias_poirel_one_row %>% dplyr::select(ID, Range, GminusL, LG_group) 
 #run this below again to include the 5 year olds again
 bk_data_combined <- full_join(bk_data_df,age_table, by="ID") %>% na.omit
 
 #what should be calculated??? sum correct, or sum shape choice? shape choice to keep it simple, doens't make a difference
-BK_bias_only <- bk_data_combined %>% group_by(ID) %>%
-                  mutate(total_bk_bias = sum(shape_choice)/n()-.5) %>% dplyr::select(ID, total_bk_bias)  %>%
+#this id grouped by ID and not sound, so adults are super close to zero
+BK_bias_only <- bk_data_combined %>% group_by(ID,Age) %>%
+                  mutate(total_bk_bias = sum(correct)/n()) %>% dplyr::select(ID, total_bk_bias)  %>%
                 filter(row_number()==1) %>% na.omit
 
 BK_LG_scores <- full_join(LG_score_only, BK_bias_only, by="ID")%>% na.omit
@@ -755,16 +907,18 @@ report(cor.test)
 BK_LG_scores_5 <- BK_LG_scores %>% filter(Range == "5")
 cor.test_5 <-cor.test(BK_LG_scores_5$GminusL, BK_LG_scores_5$total_bk_bias, method = "pearson")
 #= 0.2555
+cor.test_5
 report(cor.test_5)
 
-cor_plot <-  ggplot(BK_LG_scores, aes(GminusL, total_bk_bias))
+cor_plot <-  ggplot(BK_LG_scores, aes(GminusL, total_bk_bias, color = Age))
 cor_plot + geom_point() +
   theme_light()+
   #ylim(-0.50,0.50)+
   geom_smooth(method='lm')+
-  facet_wrap("Range")+
+  #facet_wrap("Range")+
   ylab("BK bias in expected direction")+
   xlab("<- local bias, global bias ->")+
+  scale_color_viridis_b()+
   theme(strip.background =element_rect(fill="white"))+
   theme(strip.text = element_text(colour = 'black'))
 
@@ -792,7 +946,7 @@ for(i in 1:length(all_files_c)){
 }
 
 unique(LG_data_df_c$ID) #36
-confound_list <- as.data.frame(unique(LG_data_df_c$ID))
+#confound_list <- as.data.frame(unique(LG_data_df_c$ID))
 ```
 
 #confound df
@@ -839,11 +993,14 @@ six <- LG_confound_global_bias %>% filter(Range == "6 to 8")
 res1 <- t.test(global_bias ~ target_confound, data = six)
 # Printing the results
 res1 #results are nonsignificant, p = 0.9
+cohens_d(res1)
 
 adult <- six <- LG_confound_global_bias %>% filter(Range == "Adult")
-res1 <- t.test(global_bias ~ target_confound, data = adult)
+res2 <- t.test(global_bias ~ target_confound, data = adult)
 # Printing the results
-res1 #results are nonsignificant, p = 0.9935
+res2 #results are nonsignificant, p = 0.9935
+cohens_d(res1)
+
 
 
 #is there a significant difference between within participants(within t test), and also between the non-confound
@@ -875,6 +1032,7 @@ unique(LG_con_and_noncon$ID)
 con_mod <- aov(global_bias ~ Range*type, data = LG_con_and_noncon)
 summary(con_mod)
 Anova(con_mod)
+effectsize(con_mod)
 
 
 #This is a wald chisquare test

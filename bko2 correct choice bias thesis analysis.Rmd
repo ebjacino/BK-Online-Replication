@@ -938,9 +938,13 @@ check with how Rsquared is interpreted
 #partial correlation? 
 
 library(ppcor)
+library(report)
+
 pcor.test(data_WJ$WJ_score,data_WJ$bias,data_WJ$Age,method="pearson")
 
 spcor.test(data_WJ$WJ_score,data_WJ$bias,data_WJ$Age,method="pearson")
+cor <- spcor.test(data_WJ$WJ_score,data_WJ$bias,data_WJ$Age,method="pearson")
+report(cor)
 
 #to see if there is an interaction between Age and WJ score? does the correlation between 2 variables change with age? the result with : in it is the interaction
 #linear regression
