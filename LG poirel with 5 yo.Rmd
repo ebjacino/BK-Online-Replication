@@ -24,131 +24,6 @@ round_any <- function(x, accuracy, f=round){f(x/ accuracy) * accuracy}
 ```
 
 
-generating the csvs:
-```{r }
-
-correct_stim_list = c("sound/baba_rep.wav" = "bouba",
-                      "sound/gaga_rep.wav" = "bouba",
-                      "sound/keekee.wav" = "kiki",
-                      "sound/teetee.wav" = "kiki")
-
-
-
-which_is_correct <- function(stimuli,lefts,rights) {
-  
-  #Make a new vector the same length as the number of rows
-  correct_vec <- rep(NA,length(stimuli))
-  
-  #For each row in the dataset....
-  for(i in seq(1:length(stimuli))){
-    
-    #Get the correct type ("Bouba" or "Kiki") by checking in the stim list
-    correct_type <- correct_stim_list[stimuli[i]]
-    
-    #If the correct type is in the left one the correct key was the left key
-    if(grepl(correct_type, lefts[i], fixed = TRUE)){
-      correct_key <- left_key
-    }
-    #If the correct type is in the right one the correct key was the right key
-    else if(grepl(correct_type, rights[i], fixed = TRUE)){
-      correct_key <- right_key
-    }
-    #If it isn't in either something has gone wrong so you'll get an NA
-    else{
-      correct_key <- NA
-    }
-    
-    #Put that correct key in the output vector
-    correct_vec[i] <- correct_key
-  }
-  
-  #Return the final filled in vector
-  return(correct_vec)
-}
-
-#look at the results files
-rds_files <- list.files("LG_DI_five_rds",
-                        pattern = "\\.rds$",
-                        full.names = TRUE)
-
-rds_files
-#change [#] to pick which one to read
-
-for(file in rds_files){
-  print(file)
-  file_id <- str_extract(file,"b[kl]g\\d\\d\\d")
-  
-  data <- readRDS(file)
-  
-  #assign ID
-  participant_ID <- data$results$`sp_id`[[1]]
-  main_data <- data$results$`Main page`[[1]]
-  
-  
-  df <- read.table(text = main_data, sep =",", header = TRUE, stringsAsFactors = FALSE)
-  #df is the raw data, tells you stimulus and responses
-  
-  
-  ##Ben Code ***creating tidy data and choice bias score***
-  
-  #First remove unneeded columns
-  data_cols <- df %>% dplyr::select(c(trial_type,stimulus,response,left_image,right_image,correct_response,correct)) 
-  
-  #Then Filter practice and experimental trials
-  data_prac <- data_cols %>% filter(grepl("Prac", stimulus, fixed = TRUE))
-  data_exp <- data_cols %>% filter(!grepl("Prac", stimulus, fixed = TRUE)) %>%
-    filter(trial_type  %in% c("bouba-kiki","image-keyboard-response")) %>%
-    filter(stimulus != "img/fixation.png")
-  
-  #filter out BK data 
-  data_exp_bk <-data_exp %>% filter(trial_type == "bouba-kiki")
-  #filter out the LG data
-  data_exp_lg <-data_exp %>% filter(trial_type =="image-keyboard-response") %>%
-    dplyr::select(c(trial_type, stimulus, response))
-  
-  #Now write a function to find if the left or the right image is "correct"
-  
-  data_exp_bk <- data_exp_bk %>% mutate(correct_response = which_is_correct(stimulus,left_image,right_image))
-  data_exp_bk <- data_exp_bk %>% mutate(correct = ifelse(correct_response == response,
-                                                         1,
-                                                         ifelse(response == left_key | response == right_key,
-                                                                0,
-                                                                NA)))
-  
-  data_exp_bk <- data_exp_bk %>% mutate(sound = ifelse(stimulus %in% c("sound/baba_rep.wav","sound/gaga_rep.wav"),
-                                                       "round",
-                                                       ifelse(stimulus %in% c("sound/teetee.wav","sound/keekee.wav"),
-                                                              "spiky",
-                                                              NA))) %>%
-    filter(!is.na(correct))
-  
-#adding columns to LG files to do analysis ############
-  data_exp_lg <- data_exp_lg %>% separate(stimulus, c("type","image_ID"), sep = "/") 
-  
-  data_exp_lg <- data_exp_lg %>% group_by(type) %>% 
-                                mutate(trial_num = row_number()) %>% 
-                                ungroup() %>%
-                                pivot_wider(names_from = type, values_from = c(image_ID,response)) %>%
-                                dplyr::select(!c(trial_type,response_targets))
-
-  
-  
-  
-  
-  #file_path_bk <- paste0("LG CSV files Looped/",file_id,"_bk.csv")
-  file_path_lg <- paste0("LG_DI_five_csv/",file_id,"_lg.csv")
-  
-  #file_path_prac <- paste0("LG practice trials/",file_id,".csv")
-  #write.csv(data_prac, file_path_prac)
-  
-  #write.csv(data_exp_bk, file_path_bk) 
-  write.csv(data_exp_lg, file_path_lg)
-  
-}
-
-
-```
-
 
 setup putting together the csvs into one dataframe:
 ```{r}
@@ -423,25 +298,47 @@ slice only the top 12 rows for each participant
 #LG_data_df_combined_bias has all trials for each participant
 
 
-LG_count <-LG_data_df_combined_bias %>% group_by(ID) %>% count(choice)
+LG_count <-view(LG_data_df_combined_bias) %>% group_by(ID) %>% count(choice)
 LG_count_p <- LG_count %>% pivot_wider(names_from = choice, values_from = n) %>% mutate_all(~replace(., is.na(.), 0))
 #new column with local-global
 LG_count_p <- LG_count_p %>% mutate(GminusL = global-local) %>% mutate(LG_group = ifelse(GminusL >0, "global", "local"))
 
 #change number in the slice() to change number of trials
-LG_half_trials <- LG_data_df_combined_bias %>% group_by(ID) %>%
-  dplyr::slice(1:6)
-LG_half_trials_bias <- LG_half_trials %>% group_by(ID, Range) %>% count(choice)  %>% 
+LG_second_half_trials <- LG_data_df_combined_bias %>% group_by(ID) %>%
+  dplyr::slice(13:24)
+LG_second_half_trials <- LG_second_half_trials %>% group_by(ID, Range) %>% count(choice)  %>% 
                         pivot_wider(names_from = choice, values_from = n) %>% 
-                        mutate_all(~replace(., is.na(.), 0)) %>% mutate(GminusL = global-local) %>% mutate(LG_group = ifelse(GminusL >0, "global", "local"))
+                        mutate_all(~replace(., is.na(.), 0)) %>% mutate(GminusL = global-local) %>% mutate(LG_group = ifelse(GminusL >0, "global", "local")) %>% mutate(half = "Second")
+
+#change number in the slice() to change number of trials
+LG_first_half_trials <- LG_data_df_combined_bias %>% group_by(ID) %>%
+  dplyr::slice(1:12)
+LG_first_half_trials <- LG_first_half_trials %>% group_by(ID, Range) %>% count(choice)  %>% 
+                        pivot_wider(names_from = choice, values_from = n) %>% 
+                        mutate_all(~replace(., is.na(.), 0)) %>% mutate(GminusL = global-local) %>% mutate(LG_group = ifelse(GminusL >0, "global", "local")) %>% mutate(half = "First")
+
+LG_both_halves <- rbind(LG_first_half_trials, LG_second_half_trials)
+
+half_m <- glm(GminusL ~ half*Range, data = LG_both_halves)
+Anova(half_m)
+
+
+
+
+
+
+
+
 
 
 #now make a df with one row per participant
-LG_half_trials_one_row <- LG_half_trials_bias %>% group_by(ID,Range,LG_group) %>%
+LG_second_half_trials_one_row <- LG_second_half_trials_bias %>% group_by(ID,Range,LG_group) %>%
   summarise(GminusL = mean(GminusL))
 
+LG_second_half_trials_one_row_edited <- LG_second_half_trials_one_row %>% mutate(GminusL_second = GminusL) 
+
 #summarizing with the SE and SD
-LG_half_trials_graph <- LG_half_trials_bias %>% group_by(Range, LG_group) %>%
+LG_second_half_trials_graph <- LG_second_half_trials_bias %>% group_by(Range, LG_group) %>%
   summarize(mean_bias = mean(GminusL),
             sd_bias = sd(GminusL),
             n = n(),
@@ -452,6 +349,8 @@ LG_half_trials_points <- LG_half_trials_one_row  %>% group_by(ID,Range, LG_group
   mutate(bias_round = round_any(GminusL,5)) %>%  ungroup() %>%
   group_by(Range,bias_round,LG_group) %>%
   summarise(Count = length(unique(ID)))
+
+#is there a difference in the gminusL scores for first half vs second half? need one df
 
 
 ```
@@ -493,7 +392,7 @@ LG_poirel_plot_half
 LG_poirel_plot_half_av <-ggplot() +
   geom_col(LG_half_trials_graph_avg, mapping = aes(x = Range, y = mean_bias), color = "black", fill = NA) +
   geom_col(LG_half_trials_graph_avg, mapping = aes(x = Range, y = mean_bias, fill = Range), alpha = 0.5) +
-  geom_errorbar(LG_half_trials_graph_avg, mapping = aes(x = Range, y = mean_bias, ymin = mean_bias-se_bias,ymax = mean_bias+se_bias), alpha = 1, width = .75) +
+  geom_errorbar(LG_half_trials_graph_avg, mapping = aes(x = Range, y = mean_bias, ymin = mean_bias-sd_bias,ymax = mean_bias+sd_bias), alpha = 1, width = .75) +
   geom_point(LG_half_trials_points_av, mapping = aes(x = Range, y = bias_round, size = Count, color = Range)) +
   theme_light() +
   #scale_color_manual(values = rev(cols)) +
